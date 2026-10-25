@@ -1,7 +1,7 @@
-# Command line build of the SNES core for the Mini G (Go and Mini to follow): the steps and options of the ISE 14.7
+# Command line build of the SNES core for the three boards: the steps and options of the ISE 14.7
 # project navigator (the .xise projects of the boards, removed when this Makefile replaced them).
 #
-#   make                 all the boards of BOARDS (snes.kg3; snes.kg1 Go, snes.kg2 Mini to follow)
+#   make                 all three boards (snes.kg1 Go, snes.kg2 Mini, snes.kg3 Mini G)
 #   make go|mini|minig   one board: synthesis, implementation, bitstream, .kg file
 #   make minig-xst       one step: <board>-xst (.ngc), <board>-impl (.bin), <board>-core (.kg)
 #   make minig-report    LUTs, slices, block RAMs and the timing result of the last build
@@ -14,7 +14,7 @@
 
 ISE_SETTINGS ?= /opt/Xilinx/14.7/ISE_DS/settings64.sh
 PART = xc6slx25-ftg256-2
-BOARDS = minig
+BOARDS = go mini minig
 
 SHELL = /bin/bash
 .SHELLFLAGS = -e -o pipefail -c

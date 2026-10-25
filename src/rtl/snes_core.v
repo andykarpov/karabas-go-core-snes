@@ -16,8 +16,15 @@
  5 start, 6 A, 7 B, 8 C, 9 X, 10 Y, 11 Z, 12 mode. SNES (snes_joy order): B = A, Y = X,
  Select = mode, Start = start, the directions, A = B, X = Y, L = C, R = Z.
 
- Video out: 640 x 480 window of 682 x 524 at clk_sys, rgb with the OSD; hs / vs active high,
- hs, vs, de and rgb in the same clk.
+ Video out (clk_pix): 640 x 480 with the timing of VESA 640 x 480 (snes_video), rgb with the
+ OSD; hs / vs active high; hs, vs, de and rgb in the same clk.
+
+ OSD: kg_osd_overlay runs on clk_pix. It takes a command when osd_command changes, so the
+ commands (of kg_mcu, clk_sys) cross as the words of an async fifo, each change once, and come
+ out in the same order. Its position: lines of 800 clk and frames of 524 lines are counted in
+ steps of 2, from the start of HS / VS: the 512 x 416 of the OSD in the middle of the window
+ (HS + back porch = 144 clk, + 64 = 208 clk = 104 steps; VS + back porch = 35 lines, + 32 =
+ 67 = 33 steps).
 */
 
 module snes_core #(
@@ -25,6 +32,7 @@ module snes_core #(
 ) (
 	input wire clk_sys,
 	input wire clk_mem,
+	input wire clk_pix,             // the pixel clock of the output (25.16 MHz)
 	input wire areset,
 
 	// kg_mcu
@@ -82,7 +90,7 @@ wire [11:0] pad1 = snes_pad(joy_swap ? joy_r : joy_l);
 wire [11:0] pad2 = snes_pad(joy_swap ? joy_l : joy_r);
 
 wire [7:0] snes_r, snes_g, snes_b;
-wire snes_hs, snes_vs, snes_hblank_n, snes_vblank_n;
+wire snes_hs, snes_hblank_n, snes_vblank_n;
 
 snes_system #(.USE_DSPN(USE_DSPN)) snes(
 	.clk_sys(clk_sys),
@@ -100,7 +108,7 @@ snes_system #(.USE_DSPN(USE_DSPN)) snes(
 	.G(snes_g),
 	.B(snes_b),
 	.HSYNC(snes_hs),
-	.VSYNC(snes_vs),
+	.VSYNC(),
 	.HBLANKn(snes_hblank_n),
 	.VBLANKn(snes_vblank_n),
 	.pal(),
@@ -124,23 +132,45 @@ snes_system #(.USE_DSPN(USE_DSPN)) snes(
 wire [7:0] v_r, v_g, v_b;
 wire v_hs, v_vs, v_de;
 snes_video video(
-	.clk(clk_sys),
+	.clk_sys(clk_sys),
+	.clk_pix(clk_pix),
 	.r_in(snes_r), .g_in(snes_g), .b_in(snes_b),
-	.hsync_in(snes_hs), .vsync_in(snes_vs), .hblank_n(snes_hblank_n), .vblank_n(snes_vblank_n),
+	.hsync_in(snes_hs), .hblank_n(snes_hblank_n), .vblank_n(snes_vblank_n),
 	.r(v_r), .g(v_g), .b(v_b), .hs(v_hs), .vs(v_vs), .de(v_de)
 );
 
-kg_osd_overlay osd(
-	.clk(clk_sys),
+// osd_command into clk_pix
+reg [15:0] osd_cmd_d = 16'd0;
+reg osd_cmd_wr = 1'b0;
+always @(posedge clk_sys) begin
+	osd_cmd_wr <= 1'b0;
+	if (osd_command != osd_cmd_d) begin
+		osd_cmd_d <= osd_command;
+		osd_cmd_wr <= 1'b1;
+	end
+end
+wire osd_cmd_empty;
+wire [15:0] osd_cmd_q;
+reg osd_cmd_rd = 1'b0;
+kg_async_fifo #(.DW(16), .AW(4)) osd_cmd_fifo(
+	.wclk(clk_sys), .wreset(1'b0), .wr(osd_cmd_wr), .din(osd_cmd_d), .full(),
+	.rclk(clk_pix), .rreset(1'b0), .rd(osd_cmd_rd), .dout(osd_cmd_q), .empty(osd_cmd_empty), .rcount()
+);
+// one word per 2 clk_pix: dout changes the clk after rd, the overlay sees every value
+always @(posedge clk_pix)
+	osd_cmd_rd <= !osd_cmd_empty && !osd_cmd_rd;
+
+kg_osd_overlay #(.H_OFFSET(104), .V_OFFSET(33)) osd(
+	.clk(clk_pix),
 	.rgb_i({v_r, v_g, v_b}),
 	.rgb_o(rgb),
 	.hsync_i(v_hs),
 	.vsync_i(v_vs),
-	.osd_command(osd_command)
+	.osd_command(osd_cmd_q)
 );
 
 // the overlay is one clk late: the syncs and DE with it
-always @(posedge clk_sys) begin
+always @(posedge clk_pix) begin
 	hs <= v_hs;
 	vs <= v_vs;
 	de <= v_de;

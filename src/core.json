@@ -1,0 +1,20 @@
+{
+    "id": "snes",
+    "name": "SNES",
+    "build": "26102501",
+    "bitstream": "karabas_go_top.bin",
+    "visible": true,
+    "type": "fileloader",
+    "dir": "snes",
+    "filename" : "",
+    "extensions": ".sfc,.smc,.bin",
+    "order": 7,
+    "eeprom_bank": 255,
+    "roms": [],
+    "osd": [
+        {"type": "S", "name": "ROM type", "options": ["Auto", "LoROM", "HiROM", "ExHiROM"], "default": 0, "hotkey": "Menu+M"},
+        {"type": "S", "name": "Region", "options": ["Auto", "NTSC", "PAL"], "default": 0, "hotkey": "Menu+R"},
+        {"type": "S", "name": "Swap joysticks", "options": ["Off", "On"], "default": 0, "hotkey": "Menu+J"},
+        {"type": "T", "name": "Reset", "hotkey": "F12"}
+    ]
+}
