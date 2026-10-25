@@ -6,7 +6,7 @@
 
  The 15 kHz picture of main as 640 x 480 at 60 Hz with the timing of VESA / CEA 640 x 480 (HS 96,
  back porch 48, 640 active, front porch 16 = 800 clk; VS 2 lines, back porch 33, 480 active),
- on its own pixel clock clk_pix = clk_sys x 27 / 23 (25.16 MHz, a DCM of the top). The first
+ on its own pixel clock clk_pix = clk_sys x 41 / 35 (25.10 MHz, a second PLL of the top). The first
  version used clk_sys (21.4 MHz) as the pixel clock with 682 clk lines: below the 25 MHz of
  DVI, and some monitors showed nothing.
 
@@ -14,7 +14,7 @@
  sample per 2 clk_sys (682 samples: a dot of 256 is two samples, of 512 one), and is read out as
  two output lines during the next SNES line, one sample per output pixel. The output lines are
  locked to the SNES lines: a SNES line starts output line A (800 clk), line B lasts until the
- next SNES line (1364 x 27 / 23 = 1601 clk_pix: 801 clk, 797 for the short line). The picture is
+ next SNES line (1364 x 41 / 35 = 1597.8 clk_pix: 797 or 798 clk, 793 for the short line). The picture is
  the 512 samples from the first active sample of the line, at x 64 of the window (black
  outside), so 512 x 448 (478 PAL) in the middle of 640 x 480. A frame has 2 x 262 = 524 lines
  (PAL 624), the window starts 16 lines before the first active line.

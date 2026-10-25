@@ -1,5 +1,6 @@
 verilog work "../modules/rtl/mem/kg_sdpram.v"
 verilog work "../modules/rtl/mem/kg_fifo.v"
+verilog work "../modules/rtl/mem/kg_async_fifo.v"
 verilog work "../modules/rtl/ctl/kg_soft_switches.v"
 verilog work "../modules/rtl/ctl/kg_sync.v"
 verilog work "../modules/rtl/mcu/kg_spi_slave.v"

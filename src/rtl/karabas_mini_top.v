@@ -172,20 +172,31 @@ wire clk_sys = pll_clk[0];
 wire clk_mem = pll_clk[1];
 wire areset = ~locked;
 
-// hdmi serial clock: 5 x clk_sys (the pixel clock) and its inverse
-wire clk_hdmi, clk_hdmi_n, locked_hdmi;
-kg_dcm #(
+// the pixel clock of the 640 x 480 output and the 5 x clock pair of the serialisers: a second PLL
+// on clk_sys, VCO 21.429 x 41 = 878.6 MHz: clk_hdmi / clk_hdmi_n 878.6 / 7 = 125.5 MHz (0 / 180
+// degrees), clk_pix 878.6 / 35 = 25.10 MHz = clk_sys x 41 / 35 (snes_video: 1598 clk_pix per
+// SNES line). DVI needs 25 MHz or more: the first build had clk_sys (21.4 MHz) as pixel clock.
+wire [5:0] pix_clk;
+wire locked_hdmi;
+kg_pll #(
 	.CLKIN_PERIOD(46.667),
-	.CLKFX_MULTIPLY(5),
-	.CLKFX_DIVIDE(1)
-) dcm_hdmi(
+	.DIVCLK_DIVIDE(1),
+	.CLKFBOUT_MULT(41),
+	.CLKOUT0_DIVIDE(7),
+	.CLKOUT1_DIVIDE(7),
+	.CLKOUT1_PHASE(180.0),
+	.CLKOUT2_DIVIDE(35),
+	.IBUFG(0),
+	.BUFG_MASK(6'b000111)
+) pll_pix(
 	.clk_in(clk_sys),
 	.rst(areset),
-	.clk_fx(clk_hdmi),
-	.clk_fx180(clk_hdmi_n),
-	.clk_0(),
+	.clk_out(pix_clk),
 	.locked(locked_hdmi)
 );
+wire clk_hdmi = pix_clk[0];
+wire clk_hdmi_n = pix_clk[1];
+wire clk_pix = pix_clk[2];
 
 //---------- MCU ------------
 
@@ -310,6 +321,7 @@ wire [15:0] audio_l, audio_r;
 snes_core #(.USE_DSPN(1)) core(
 	.clk_sys(clk_sys),
 	.clk_mem(clk_mem),
+	.clk_pix(clk_pix),
 	.areset(areset),
 	.softsw_command(softsw_command),
 	.osd_command(osd_command),
@@ -346,7 +358,7 @@ snes_core #(.USE_DSPN(1)) core(
 // sound is on the PCM5102 output). 640 x 480: negative syncs.
 wire [9:0] enc_r, enc_g, enc_b;
 dvi dvi(
-	.CLK(clk_sys),
+	.CLK(clk_pix),
 	.RESET(~locked_hdmi),
 	.RGB(osd_rgb),
 	.HSYNC(~hd_hs),
@@ -357,13 +369,13 @@ dvi dvi(
 	.ENC_BLUE(enc_b)
 );
 
-tmds_serializer ser_b(.clk(clk_sys), .sclk(clk_hdmi), .sclk_n(clk_hdmi_n), .reset(~locked_hdmi),
+tmds_serializer ser_b(.clk(clk_pix), .sclk(clk_hdmi), .sclk_n(clk_hdmi_n), .reset(~locked_hdmi),
 	.tmds_d(enc_b), .tx_d_n(TMDS_N[0]), .tx_d_p(TMDS_P[0]));
-tmds_serializer ser_g(.clk(clk_sys), .sclk(clk_hdmi), .sclk_n(clk_hdmi_n), .reset(~locked_hdmi),
+tmds_serializer ser_g(.clk(clk_pix), .sclk(clk_hdmi), .sclk_n(clk_hdmi_n), .reset(~locked_hdmi),
 	.tmds_d(enc_g), .tx_d_n(TMDS_N[1]), .tx_d_p(TMDS_P[1]));
-tmds_serializer ser_r(.clk(clk_sys), .sclk(clk_hdmi), .sclk_n(clk_hdmi_n), .reset(~locked_hdmi),
+tmds_serializer ser_r(.clk(clk_pix), .sclk(clk_hdmi), .sclk_n(clk_hdmi_n), .reset(~locked_hdmi),
 	.tmds_d(enc_r), .tx_d_n(TMDS_N[2]), .tx_d_p(TMDS_P[2]));
-tmds_serializer ser_c(.clk(clk_sys), .sclk(clk_hdmi), .sclk_n(clk_hdmi_n), .reset(~locked_hdmi),
+tmds_serializer ser_c(.clk(clk_pix), .sclk(clk_hdmi), .sclk_n(clk_hdmi_n), .reset(~locked_hdmi),
 	.tmds_d(10'b1111100000), .tx_d_n(TMDS_N[3]), .tx_d_p(TMDS_P[3]));
 
 //---------- audio DAC ------------

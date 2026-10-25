@@ -32,7 +32,7 @@ module snes_core #(
 ) (
 	input wire clk_sys,
 	input wire clk_mem,
-	input wire clk_pix,             // the pixel clock of the output (25.16 MHz)
+	input wire clk_pix,             // the pixel clock of the output (25.10 MHz)
 	input wire areset,
 
 	// kg_mcu

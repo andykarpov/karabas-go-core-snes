@@ -190,6 +190,26 @@ wire clk_sys = pll_clk[0];
 wire clk_mem = pll_clk[1];
 wire areset = ~locked;
 
+// the pixel clock of the 640 x 480 output: a second PLL
+// on clk_sys, VCO 21.429 x 41 = 878.6 MHz: clk_pix 878.6 / 35 = 25.10 MHz = clk_sys x 41 / 35 (snes_video: 1598 clk_pix per
+// SNES line). The same clock as on the Mini / Mini G.
+wire [5:0] pix_clk;
+wire locked_pix;
+kg_pll #(
+	.CLKIN_PERIOD(46.667),
+	.DIVCLK_DIVIDE(1),
+	.CLKFBOUT_MULT(41),
+	.CLKOUT2_DIVIDE(35),
+	.IBUFG(0),
+	.BUFG_MASK(6'b000100)
+) pll_pix(
+	.clk_in(clk_sys),
+	.rst(areset),
+	.clk_out(pix_clk),
+	.locked(locked_pix)
+);
+wire clk_pix = pix_clk[2];
+
 //---------- MCU ------------
 
 wire [7:0] hid_kb_status, hid_kb_dat0, hid_kb_dat1, hid_kb_dat2, hid_kb_dat3, hid_kb_dat4, hid_kb_dat5;
@@ -312,6 +332,7 @@ wire [15:0] audio_l, audio_r;
 snes_core #(.USE_DSPN(1)) core(
 	.clk_sys(clk_sys),
 	.clk_mem(clk_mem),
+	.clk_pix(clk_pix),
 	.areset(areset),
 	.softsw_command(softsw_command),
 	.osd_command(osd_command),
@@ -344,10 +365,10 @@ snes_core #(.USE_DSPN(1)) core(
 
 //---------- VGA (the video DAC of the board) ------------
 
-// 640 x 480: negative syncs; the DAC takes the pixels with the rising V_CLK (clk_sys, as the NES core)
+// 640 x 480: negative syncs; the DAC takes the pixels with the rising V_CLK (clk_pix, as the NES core)
 reg [7:0] vga_r = 8'd0, vga_g = 8'd0, vga_b = 8'd0;
 reg vga_hs = 1'b1, vga_vs = 1'b1;
-always @(posedge clk_sys) begin
+always @(posedge clk_pix) begin
 	{vga_r, vga_g, vga_b} <= hd_de ? osd_rgb : 24'd0;
 	vga_hs <= ~hd_hs;
 	vga_vs <= ~hd_vs;
@@ -360,8 +381,8 @@ assign VGA_VS = vga_vs;
 
 ODDR2 u_v_clk(
 	.Q(V_CLK),
-	.C0(clk_sys),
-	.C1(~clk_sys),
+	.C0(clk_pix),
+	.C1(~clk_pix),
 	.CE(1'b1),
 	.D0(1'b1),
 	.D1(1'b0),

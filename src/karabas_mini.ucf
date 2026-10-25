@@ -221,11 +221,13 @@ NET "FLASH_HOLD_N"  LOC="P12"  | IOSTANDARD = LVCMOS33; # CONF_IO3
 # Timing constraints.
 #
 # Clocks (kg_pll in the top), one PLL on CLK_50MHZ, VCO 600 MHz (50 * 12), phase 0:
-#   pll_clk<0> 21.43 MHz (/28) -> clk_sys: the SNES (main), the MCU link, video (the pixel clock of the
-#              31 kHz output), OSD, audio; the input of the HDMI DCM (kg_dcm, x5 and its inverse)
+#   pll_clk<0> 21.43 MHz (/28) -> clk_sys: the SNES (main), the MCU link, the line buffer of the video, audio;
+#              the input of the second PLL (pll_pix, VCO 878.6 MHz = clk_sys x 41)
 #   pll_clk<1> 85.71 MHz (/7)  -> clk_mem = 4 x clk_sys: the SRAM and SDRAM controllers
-# The PERIOD of CLK_50MHZ is derived onto the PLL outputs and the DCM, so the paths in each clock, between
-# clk_sys and clk_mem (every clk_sys edge is a clk_mem edge) and to the 5x clocks are analysed with their phases.
+#   pix_clk<2> 25.10 MHz (/35) -> clk_pix: the 640 x 480 output (snes_video), OSD, DVI / VGA
+#   pix_clk<0>, <1> 125.5 MHz (/7, 0 / 180 degrees): the serialisers of DVI (Mini, Mini G)
+# The PERIOD of CLK_50MHZ is derived onto the PLL outputs, so the paths in each clock and from clk_pix to the
+# 5x clocks are analysed with their phases; clk_sys <-> clk_mem and clk_sys <-> clk_pix are bounded below.
 # ------------------------------------------------------------------------------------------------------------
 NET "CLK_50MHZ" TNM_NET = "CLK_50MHZ";
 TIMESPEC "TS_CLK_50MHZ" = PERIOD "CLK_50MHZ" 20 ns HIGH 50%;
@@ -248,6 +250,14 @@ TIMESPEC "TS_SYS_TO_MCU" = FROM "TG_CLK_SYS" TO "TG_CLK_MCU" 31.25 ns DATAPATHON
 # next clk_mem edge, and so is a clk_mem register by clk_sys (the answers have more, below).
 TIMESPEC "TS_SYS_TO_MEM" = FROM "TG_CLK_SYS" TO "TG_CLK_MEM" 11.6 ns;
 TIMESPEC "TS_MEM_TO_SYS" = FROM "TG_CLK_MEM" TO "TG_CLK_SYS" 11.6 ns;
+
+# clk_sys <-> clk_pix (41 / 35 of one VCO, no useful phase): what crosses is the toggle of a new SNES line (two
+# clk_pix flip-flops) with the buffer line and flags of that line, which hold for the whole line (snes_video.v),
+# and the OSD commands and the pointers of kg_async_fifo (Gray code, synchronisers); the line buffer has a port
+# in each clock. Their data paths are bounded by less than a period of the faster clock.
+NET "pix_clk<2>" TNM_NET = "TG_CLK_PIX";
+TIMESPEC "TS_SYS_TO_PIX" = FROM "TG_CLK_SYS" TO "TG_CLK_PIX" 20 ns DATAPATHONLY;
+TIMESPEC "TS_PIX_TO_SYS" = FROM "TG_CLK_PIX" TO "TG_CLK_SYS" 20 ns DATAPATHONLY;
 
 # The answers of the memory controllers (rtl/mem/snes_sram.v, snes_sdram.v: *_ack, *_dout; the SRAM acks are not used) are registers of
 # clk_mem that change at the clk_mem edge of a rising clk_sys edge only (ph 0); the SNES takes them with clk_sys,
