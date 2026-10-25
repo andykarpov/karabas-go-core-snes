@@ -1,0 +1,3 @@
+# imported upstream sources and their references keep their bytes (CRLF), for the comparison with upstream
+src/rtl/snes/** -text
+src/sim/eq/ref/** -text
