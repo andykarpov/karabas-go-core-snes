@@ -18,9 +18,11 @@ ISE_SETTINGS=${ISE_SETTINGS:-/opt/Xilinx/14.7/ISE_DS/settings64.sh}
 TOP=${1:-main}
 MODE=Speed; LEVEL=1
 if [ "$2" = area ]; then MODE=Area; LEVEL=2; fi
+# XCF=<file>: per module options of XST (MODEL ... opt_mode = area), see area.xcf
+XCF=${XCF:-}
 DSPN=${DSPN:-0}
 
-D=$FIT/build/${TOP}_${MODE}_dspn$DSPN
+D=$FIT/build/${TOP}_${MODE}_dspn$DSPN${XCF:+_$(basename $XCF .xcf)}
 rm -rf "$D"; mkdir -p "$D/xst/projnav.tmp"
 cd "$D"
 ln -s "$(cd "$FIT/.." && pwd)/rtl" rtl # init files of memories are named relative to src/
@@ -51,6 +53,7 @@ run
 -keep_hierarchy Soft
 -shreg_extract YES
 EOF
+if [ -n "$XCF" ]; then echo "-uc $FIT/$XCF" >> fit.xst; fi
 if [ "$TOP" = main ]; then
 	echo "-generics {USE_DLH=1 USE_CX4=0 USE_SDD1=0 USE_GSU=0 USE_SA1=0 USE_DSPn=$DSPN USE_SPC7110=0 USE_BSX=0 USE_SUFAMI=0 USE_MSU=0 USE_SS=0}" >> fit.xst
 fi

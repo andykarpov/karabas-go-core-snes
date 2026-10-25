@@ -1,0 +1,4 @@
+MODEL "SPPU" opt_mode = area;
+MODEL "DSP" opt_mode = area;
+MODEL "SMP" opt_mode = area;
+MODEL "SPC700" opt_mode = area;

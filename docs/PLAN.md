@@ -138,7 +138,15 @@ DSPn стоит всего ~80 LUT, но 20 RAMB16 (ПЗУ программы 80
   2. DSP — 4,8k: 9 сумматоров 34 бит, 10 умножителей (уже DSP48). Разобрать подробнее.
   3. PPU — 4,0k.
 
+### Решения после Ф0 (2026-10-25)
+
+- Память — **вариант B**: VRAM в SRAM вместе с ARAM и BSRAM (`rtl/mem/snes_sram.v`), ROM и WRAM в SDRAM (`rtl/mem/snes_sdram.v`), BRAM — микрокод, DSPn, буферы. DSPn включён (прошивки DSP в git с разрешения автора).
+- Тест на реальном железе важнее HDMI-аудио: первая сборка выводит **DVI** (`dvi.vhd` + `tmds_serializer` modules, ~230 LUT); `hdmi_tx` zhdmi — 2 240 LUT, HDMI NES — 1 094 LUT, не помещаются вместе с SNES. Звук — PCM5102. HDMI-аудио вернуть после экономии LUT.
+- Регистры DMA SCPU в однопортовую RAM не переводятся: в одном такте бывают две записи в одно поле с разными индексами (`NTLR(DMA_CH)` в HDS_INIT и `NTLR(DMA_CH_LATCH)` после FETCH_SCANLINE_COUNTER, так же `DAS`). Переписывать только вместе с тестами DMA / HDMA на ROM.
+
 ## Ф1. Каркас Mini G
+
+*Сделано (не проверено на железе)*: `karabas_minig_top.v` с SNES сразу (без тестового генератора), `src/Makefile` (BOARDS = minig), `karabas_minig.ucf` (пины NES + тайминги), `core_minig.json` (ROM type, Region, Swap joysticks, Reset). Видео: `rtl/video/snes_video.v` — удвоитель строк на clk_sys, окно DE 640 x 480 вокруг 512 x 448.
 
 - `karabas_minig_top.v`: `kg_pll` (21,48 / 85,94), `kg_dcm` для HDMI, `kg_mcu` (file loader, HID, OSD), `kg_soft_switches`, `kg_osd_overlay`, `zhdmi_top`, `kg_pcm5102`.
 - Тестовый генератор вместо SNES: картинка 682 x 524 через удвоитель и OSD — проверить HDMI на мониторах до появления SNES.
@@ -146,6 +154,8 @@ DSPn стоит всего ~80 LUT, но 20 RAMB16 (ПЗУ программы 80
 - Констрейнты как у NES / tsconf: PERIOD на `CLK_50MHZ` с выводом на выходы PLL / DCM, DATAPATHONLY на переходах (MCU_SCK ↔ clk_sys), `kg_sync` для `dvi_only` в пиксельный клок (здесь он совпадает с `clk_sys` — проще, чем у NES).
 
 ## Ф2. Память и загрузчик
+
+*Сделано (симуляция)*: `snes_sdram.v` (CL2, 6 тактов на доступ, рефреш между запросами, окно захвата чтения при круговой задержке платы 3,2–11,5 нс), `snes_sram.v` (3 такта на доступ, /WE в среднем такте), `snes_phase.v`; запросы-переключатели как у MiST, ответы на фазе 0 (`TS_MEM_ANSWER`). Загрузчик через `kg_fifo`, `snes_hdr.v` — заголовок после загрузки чтением из SDRAM (оценка кандидатов, заголовок копировщика). Тесты: `sim/mem/run_mem_sim.sh`, `sim/sys/run_sys_sim.sh`. Не сделано: очистка WRAM / ARAM при старте (значения MiSTer), загрузка `.spc`.
 
 - Контроллер SDRAM: ROM + WRAM, один канал на `clk_mem`, CL2; основа — `sdram.sv` MiSTer (перевод на Verilog) или `sdram_nano.v` / `sdram_cl2_3ch.v` snestang (уже Verilog), рефреш, порт загрузчика. Тесты: модель SDRAM с проверкой таймингов (как `run_fastram_sim.sh` nanomig).
 - Контроллер SRAM: слоты по фазе mclk (ARAM — SMP/DSP, CPU — BSRAM, третий — сохранение / загрузчик), задержка данных под ожидания `main` (`READ_PULSE`, `SYSCLKR_CE`, как у MiST). Бюджет SRAM в ucf.

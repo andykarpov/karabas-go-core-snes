@@ -79,3 +79,6 @@ src/fit/build/
 
 # simulation work directories
 src/sim/*/build/
+
+# logs of make
+src/build_*.log
