@@ -1,0 +1,169 @@
+# План порта SNES на Karabas Go / Mini / Mini G
+
+Цель: ядро SNES для трёх плат (Xilinx Spartan-6 XC6SLX25-2, ISE 14.7, XST): одно ядро, три верха, как у `karabas-go-core-nes` и `karabas-go-core-tsconf`. Первая плата — Mini G (HDMI, PCM5102), затем Mini (HDMI, sigma-delta), затем Go (VGA, PCM5102).
+
+Затрагиваемые репозитории:
+
+| Репозиторий | Что меняется |
+|---|---|
+| `karabas-go-core-snes` | ядро: upstream RTL, верхи плат, контроллеры памяти, видео, загрузчик, сохранения |
+| `karabas-go-modules` | ничего нового на старте (`kg_mcu`, `kg_pll`, `kg_dcm`, `kg_*` память, `zhdmi`, `kg_osd_overlay`, ЦАП); позже `kg_bk_ram` (общий с NES, Ф2 его плана) |
+| `karabas-go-firmware` | на старте ничего (тип `fileloader`); для `.srm` — `CMD_BK_MOUNT` / `CMD_IMG_FLUSH` из плана NES |
+| `karabas-go-tools` | `core.json` нового ядра; поле `saves` — вместе с NES |
+
+## 0. Исходные данные
+
+### Платы
+
+Все три платы одинаковы в том, что важно для SNES:
+
+- FPGA XC6SLX25-2: 15 032 LUT6, 3 758 слайсов, 52 RAMB16 (117 КБ), 38 DSP48A1.
+- SRAM 2M x 16 (4 МБ, две микросхемы 2M x 8 с общим адресом `MA[20:0]`, `MWR_N[1:0]` / `MRD_N[1:0]`), асинхронная, 10 нс.
+- SDRAM MT48LC16M16A2 (32 МБ, 16 бит), на всех трёх платах.
+- MCU-линк `kg_mcu`: загрузчик файлов, OSD, HID (клавиатура, мышь, `joy_l` / `joy_r` по 13 бит), RTC, file mounter (`ENABLE_IMG`).
+- Видео: Go — VGA (`VGA_R/G/B` 8 бит), Mini / Mini G — HDMI (`zhdmi_top`, умеет 32 кГц аудио — родная частота DSP SNES).
+- Звук: Go и Mini G — PCM5102 (`kg_pcm5102`), Mini — `kg_sigma_delta_dac`.
+
+### Что нужно SNES
+
+| Память | Объём | Кто обращается | Темп |
+|---|---|---|---|
+| ROM картриджа | до 4 МБ (ExHiROM до 6–8 МБ) | CPU, DMA | ≤ 1 доступ на цикл CPU (6/8/12 mclk) |
+| WRAM | 128 КБ | CPU, DMA | как ROM (доступы CPU взаимоисключающие) |
+| BSRAM (сейвы) | 2–256 КБ (обычно 2–32 КБ) | CPU, сохранение | как ROM |
+| VRAM | 64 КБ (2 x 32K x 8, в mode 7 разные адреса у двух половин) | PPU, CPU через порты | 1 чтение (2 байта) на точку = 4 mclk |
+| ARAM | 64 КБ | SPC700, DSP | ~1 доступ на точку |
+| CGRAM, OAM, буферы PPU/DSP | ~2 КБ | внутри | BRAM |
+
+Mclk = 21,477 МГц (NTSC), 21,281 МГц (PAL). Ресурсов на «всё в BRAM», как у MiSTer, нет: VRAM + ARAM + WRAM = 256 КБ при 117 КБ BRAM.
+
+### Кандидаты upstream
+
+Клоны для изучения — вне git (коммиты на 2026-10-25):
+
+| Проект | Коммит | Язык | Память | Платформа и размер | Вывод |
+|---|---|---|---|---|---|
+| [MiSTer-devel/SNES_MiSTer](https://github.com/MiSTer-devel/SNES_MiSTer) (srg320) | `bdcd33c` 2026-10-23 | VHDL (CPU, PPU, SMP, DSP, чипы), `main.v`, верх SV | ROM + WRAM в SDRAM (`sdram.sv`, ~85 МГц), VRAM / ARAM / BSRAM в BRAM | Cyclone V, ресурсов с избытком | Эталон совместимости, все доп. чипы, снапшоты. Раскладка памяти не подходит. |
+| [gyurco/SNES_FPGA](https://github.com/gyurco/SNES_FPGA), каталог `mist/` | `b7c50e5` 2025-10-14 | Тот же RTL, что MiSTer (`rtl/`), верх MiST — SV | По дефайнам: всё в SDRAM (`sdram_cl3.sv`: CPU, ARAM, VRAM1/2 с чередованием, 128 МГц CL3) или `BRAM_LEVEL_1` / `BRAM_ARAM` / `USE_SIMPLE_SDRAM` | MiST: **EP3C25** (24,6k LE, 608 Кбит M9K) — по объёму ближе всего к XC6SLX25 | **Основа.** Тот же код, что у MiSTer (исправления приходят сами), уже ужат под маленькую FPGA, архитектура «внешний MCU + SPI» как у нас. |
+| [nand2mario/snestang](https://github.com/nand2mario/snestang) | `5f0ef19` 2026-09-28 | Verilog — перевод SNES_FPGA (65C816, SPC700, PPU, DSP, DSPn), куски SV (`package` / `struct` в `common.sv`, `_spc700_package.v`, `logic` в `dsp.v`, `ppu.v`) | VRAM в BRAM или SDRAM, остальное в SDRAM: 3-канальный CL2 контроллер на 4 x mclk (~86 МГц), `sdram_cl2_3ch.v` | Tang Nano 20K (GW2AR-18, 20,7k LUT4) — помещается вместе с PicoRV32 и DSPn | **Донор**: Verilog-версии модулей (если XST не справится с VHDL или они окажутся меньше), SDRAM CL2 на 86 МГц, апскейлер без кадрового буфера, автосохранение BSRAM. Отстаёт от upstream. |
+
+Почему не snestang целиком: его SV-части XST тоже не понимает (как и MiSTer), код расходится с upstream, а исправления совместимости идут в SNES_MiSTer / SNES_FPGA. VHDL MiSTer XST в основном принимает (проверено ghdl: VHDL-93 + немного 2008: выражения в `port map` у `SNES.vhd`, `case` без `others` в `CPU.vhd`; обёртки Altera `dpram` / `dpram_dif` из `bram.vhd` — заменить на `kg_*`).
+
+## Архитектура (предварительно, проверяется в Ф0)
+
+### Клоки
+
+Один PLL от 50 МГц: VCO 687,5 МГц (M = 55, D = 4):
+
+- `clk_sys` = mclk 21,484 МГц (/32, +0,03 % к NTSC) — вся SNES, `kg_mcu`, OSD, видео;
+- `clk_mem` = 85,94 МГц (/8) = 4 x mclk, фаза 0 — контроллеры SDRAM / SRAM (связанные клоки, как в snestang и tsconf);
+- HDMI: `kg_dcm` 5 x `clk_sys` (107,4 МГц) для сериализатора.
+
+PAL на той же частоте (−0,9 % у 50 Гц) — на первом этапе, отдельный PLL потом при необходимости.
+
+### Память
+
+Вариант A (основной) — по раскладке MiSTer, без многоканального SDRAM:
+
+| Где | Что | Почему |
+|---|---|---|
+| SDRAM | ROM (до 8 МБ), WRAM 128 КБ | Один канал (CPU / DMA / загрузчик), это `sdram.sv` MiSTer / `USE_SIMPLE_SDRAM` MiST на ~85 МГц — проверенный тайминг. Рефреш в паузах CPU. |
+| SRAM | ARAM 64 КБ, BSRAM до 256 КБ, (резерв: VRAM — вариант B) | Асинхронная 10 нс, без рефреша и банков: два слота на mclk (SMP/DSP и CPU/сохранение), детерминированная задержка. |
+| BRAM | VRAM 64 КБ (32 RAMB16), CGRAM, OAM, буферы PPU / DSP, микрокод, строковый буфер, OSD | Как `BRAM_LEVEL_1` MiST. |
+
+Вариант B (если BRAM не хватит): VRAM в SRAM. На точку (4 mclk = 16 клоков `clk_mem`) нужно VRAM1 + VRAM2 (разные адреса в mode 7) + ARAM + CPU — 4 доступа по 3 клока, помещается. Вариант C (запасной): 3-канальный SDRAM snestang (`sdram_cl2_3ch.v`, CPU / ARAM / VRAM).
+
+### Видео
+
+Без кадрового буфера (256 x 224 x 15 бит = 860 Кбит — нет места): **удвоитель строк** на mclk. Строка SNES = 1364 mclk, удвоенная = 682 → 31,5 кГц, 524 строки, 60,1 Гц; пиксельный клок = `clk_sys`, точка SNES = 2 пикселя (hires 512 — 1 пиксель), отдельного видеоклока нет. Буфер — 2 строки x 512 x 15 бит (1–2 RAMB16). HDMI: `zhdmi_top` с DE-окном (как nanomig: 908 x 625 Amber шло прямо в zhdmi), VGA Go — те же сигналы на ЦАП. Риск: нестандартный 682 x 524 при 21,48 МГц — проверить на нескольких мониторах / ТВ; запасной путь — кадровый буфер в SDRAM (её почти не нагружает вариант A) и честные 480p.
+
+### Загрузчик и тип картриджа
+
+- `kg_mcu` file loader → SDRAM (ядро в reset). Расширения `.sfc`, `.smc`, `.bin`; заголовок копировщика (512 Б) — по `IOCTL_SIZE` (размер mod 1024 = 512), если ядро грузится через `FILE_CMDS = 0`, иначе по оценке заголовка с обоими смещениями.
+- Определение LoROM / HiROM / ExHiROM **в ядре**: прошивка Karabas (в отличие от ARM MiST, `ioctl_index[7:6]`, и RISC-V snestang) заголовок не разбирает. При загрузке захватываются 32-байтные кандидаты заголовка (`0x7FC0`, `0xFFC0`, `0x40FFC0`, плюс `+512`), после загрузки — оценка по правилам `parse_snes_header()` snestang / bsnes (тип карты, размер ROM, контрольная сумма и её дополнение, вектор reset). Дальше — логика `rom_type` / `rom_mask` / `ram_mask` из `SNES.sv` MiST (DSPn, OBC1, GSU и т.д.). OSD-переключатель «ROM type: Auto / LoROM / HiROM / ExHiROM» на случай ошибки.
+
+### Ввод
+
+`joy_l` / `joy_r` (13 бит) → регистры сдвига SNES-джойпада (`JOY1_DI` / `JOY2_DI` / `JOY_STRB` / `JOY*_CLK` у `main`); `ioport.sv` MiSTer (SV) — переписать на Verilog. Раскладка: B Y Select Start ↑ ↓ ← → A X L R; клавиатура — через `hid_parser` по образцу NES. Мышь SNES (`MS_*`) и мультитап — позже.
+
+## Ф0. Подготовка и проверка «влезет ли» (решающая)
+
+1. Репозиторий как у NES: `modules/` сабмодулем, `src/Makefile` (три платы, шаги xst / impl / core / report), `karabas_<board>_top.prj/.xst/.ut/.ucf` из `karabas-go-core-nes`, `make_core.py` симлинком, `CLAUDE.md`, `docs/UPSTREAM.md` (коммиты, таблица файлов, языки, что заменено).
+2. Импорт `SNES_FPGA/rtl` в `src/rtl/snes/` на зафиксированном коммите, без чипов кроме DSPn / OBC1 / SRTC. Правки — с комментарием `-- karabas:`.
+3. **Пробный синтез XST одного `main`** (память — порты наружу, `-iobuf NO`), на `clk_sys` 21,48 МГц: LUT, регистры, RAMB16, DSP48, оценка тайминга. Варианты:
+   - `main` без доп. чипов;
+   - `+ DSPn` (DSP-1: Super Mario Kart, Pilotwings);
+   - для сравнения — те же модули из snestang (после чистки SV).
+4. Бюджет: SNES ≤ ~11k LUT, чтобы с `kg_mcu` (~1k), zhdmi (~1k), OSD, контроллерами памяти и удвоителем остаться ≤ ~90 % слайсов (у nanomig 99 % слайсов при 89 % LUT — уже на пределе PAR). BRAM: VRAM 32 + остальное ≤ 52, иначе вариант B.
+5. Решение по таблице результатов записать сюда: какой RTL (VHDL SNES_FPGA / Verilog snestang / смесь по модулям), вариант памяти A/B/C, есть ли место для DSPn.
+
+Если `main` один не влезает в ~12k LUT — искать в `.syr` память, развёрнутую в LUT (как с floppy у nanomig: асинхронное чтение, несколько портов) и переписывать её на `kg_*`; микрокод 65C816 / SPC700 — в BRAM-ПЗУ.
+
+## Ф1. Каркас Mini G
+
+- `karabas_minig_top.v`: `kg_pll` (21,48 / 85,94), `kg_dcm` для HDMI, `kg_mcu` (file loader, HID, OSD), `kg_soft_switches`, `kg_osd_overlay`, `zhdmi_top`, `kg_pcm5102`.
+- Тестовый генератор вместо SNES: картинка 682 x 524 через удвоитель и OSD — проверить HDMI на мониторах до появления SNES.
+- `core_minig.json`: `"type": "fileloader"`, `"dir": "snes"`, `".sfc,.smc,.bin"`, OSD: Reset (последним, F12), ROM type, Region.
+- Констрейнты как у NES / tsconf: PERIOD на `CLK_50MHZ` с выводом на выходы PLL / DCM, DATAPATHONLY на переходах (MCU_SCK ↔ clk_sys), `kg_sync` для `dvi_only` в пиксельный клок (здесь он совпадает с `clk_sys` — проще, чем у NES).
+
+## Ф2. Память и загрузчик
+
+- Контроллер SDRAM: ROM + WRAM, один канал на `clk_mem`, CL2; основа — `sdram.sv` MiSTer (перевод на Verilog) или `sdram_nano.v` / `sdram_cl2_3ch.v` snestang (уже Verilog), рефреш, порт загрузчика. Тесты: модель SDRAM с проверкой таймингов (как `run_fastram_sim.sh` nanomig).
+- Контроллер SRAM: слоты по фазе mclk (ARAM — SMP/DSP, CPU — BSRAM, третий — сохранение / загрузчик), задержка данных под ожидания `main` (`READ_PULSE`, `SYSCLKR_CE`, как у MiST). Бюджет SRAM в ucf.
+- VRAM в `kg_sdpram` / `kg_tdpram` (2 x 32K x 8).
+- Загрузчик ROM, захват и оценка заголовка, `rom_type` / маски, очистка WRAM / ARAM при старте (значения из OSD MiSTer: `9966`, `00FF`, `55`, `FF` — для игр, зависящих от мусора в RAM).
+- Тесты (iverilog / ISim): загрузчик по MCU-линку → SDRAM-модель → чтения CPU; определение типа на наборе заголовков реальных ROM (LoROM, HiROM, ExHiROM, с копировщиком и без).
+
+## Ф3. Первый запуск SNES
+
+- `main` в верхе Mini G, удвоитель → HDMI, звук 32 кГц → zhdmi (родной `SAMPLERATE = 32000`) и PCM5102, пики `audio_peaks.v` для прошивки.
+- Джойпады, Reset (OSD / F12), пауза SNES во время работы MCU.
+- Симуляция: verilator-обвязка snestang (`verilator/`, SDL) как образец — прогон ROM, кадры в файл; тестовые ROM: PeterLemon (CPU / PPU / SPC700), blargg `spc_*`, `krom`; затем игры: Super Mario World (LoROM, BSRAM), Zelda ALttP (BSRAM), Super Metroid, DKC (HiROM 4 МБ), Chrono Trigger (HiROM 4 МБ), Tales of Phantasia (ExHiROM).
+- Тайминг: «All constraints were met», LUT / слайсы — в `CLAUDE.md` после каждой сборки.
+
+## Ф4. Mini и Go
+
+- Перенос логики в `karabas_mini_top.v` (sigma-delta, ADC не нужен) и `karabas_go_top.v` (VGA вместо HDMI: те же 31 кГц сигналы на `VGA_R/G/B`, без DCM). Общая логика ядра — в общий модуль (`snes_system.v`, как `nes_system.v`), чтобы три верха не расходились.
+- `core.json` / `core_mini.json` → `snes.kg1` / `kg2` / `kg3` в релиз.
+
+## Ф5. Сохранения `.srm`
+
+- Тот же механизм, что в Ф2 плана NES: `kg_bk_ram` в `karabas-go-modules`, `CMD_BK_MOUNT` / `CMD_IMG_FLUSH`, поле `saves` в `core.json`. Делать после NES или вместе — протокол один.
+- BSRAM в SRAM, `kg_bk_ram` ходит в свой слот SRAM, игра не тормозит. Размер из `ram_size` заголовка (и правила `SNES.sv` для GSU / SA-1).
+- Формат — сырой дамп, совместимый с MiSTer / snestang / эмуляторами (`.srm`).
+
+## Ф6. Доп. чипы (в пределах ресурсов)
+
+По остатку после Ф4:
+
+1. DSPn (DSP-1/2/3/4, ST010/011): Super Mario Kart, Pilotwings — ПЗУ микрокода в BRAM (`dsp11b23410_p/d.hex` у snestang: 2K x 24 + 1K x 16, ~4 RAMB16).
+2. OBC1, S-RTC (RTC из `kg_mcu_rtc` в `EXT_RTC`).
+3. SuperFX (GSU), SA-1, CX4, SDD1, SPC7110 — по оценке не помещаются в XC6SLX25 (каждый — тысячи LUT, у MiST они отключены `EXTRA_CHIPS_*`); вернуться, только если после Ф6.1 останется > 30 % LUT.
+
+## Ф7. Прочее (по желанию)
+
+- PAL / регион из заголовка, отдельная частота PLL.
+- Мышь SNES, мультитап, лайтган (мышью).
+- SPC-плеер (`SPC_MODE` MiSTer, загрузка `.spc` в ARAM).
+- Game Genie / читы.
+- Снапшоты — у MiSTer есть (`savestates*.sv`), но память состояния (VRAM + ARAM + WRAM + регистры ≈ 260 КБ) и LUT — после всего остального, вместе с Ф6 плана NES.
+- MSU-1 не планируется (нужен потоковый доступ к SD).
+
+## Порядок и зависимости
+
+```
+Ф0 (решение: RTL, память) ─ Ф1 (каркас Mini G) ─ Ф2 (память) ─ Ф3 (SNES на Mini G) ─ Ф4 (Mini, Go)
+                                                                        └─ Ф5 (.srm, общий с NES) ─ Ф6 ─ Ф7
+```
+
+- Ф1 можно делать параллельно с Ф0: каркас (клоки, MCU, HDMI, OSD) от выбора RTL не зависит.
+- Ф5 зависит от `kg_bk_ram` и прошивки — синхронизировать с NES.
+
+## Риски и открытые вопросы
+
+- **LUT / слайсы.** Главный риск. MiST SNES на EP3C25 (24,6k LE LUT4) и snestang на GW2AR-18 (20,7k LUT4, с PicoRV32) — обнадёживающе, но 15k LUT6 / 3 758 слайсов Spartan-6 при заполнении > 90 % дают долгий PAR и плохой тайминг (опыт nanomig). Ответ — Ф0.
+- **XST и VHDL MiSTer**: выражения в `port map`, возможные конструкции VHDL-2008 глубже — выяснить в Ф0. Запасной путь — Verilog snestang по модулям.
+- **Тайминг 21,48 МГц**: PPU / DSP MiSTer рассчитаны на Cyclone V; на Spartan-6 -2 длинные комбинационные пути (умножители DSP, мультиплексоры PPU) — смотреть `.twr`.
+- **Выход 682 x 524**: совместимость HDMI-приёмников. Запас — кадровый буфер в SDRAM.
+- **SRAM на 85,94 МГц**: 2–3 клока на доступ (23–35 нс) — бюджет с учётом IOB, проверить на железе тестом памяти (`karabas-go-core-sdram-test` как образец).
+- ROM > 4 МБ: в варианте A в SDRAM места хватает; ExHiROM проверить на Tales of Phantasia / Star Ocean (последний — SDD1, не пойдёт).
