@@ -77,8 +77,5 @@ make_core.py
 # trial synthesis (src/fit/run_fit.sh)
 src/fit/build/
 
-# DSPn firmware converted from the .mif of upstream (src/tools/mif2bin.py), not in git
-src/rtl/snes/chip/DSP/dsp11b23410_*.txt
-
 # simulation work directories
 src/sim/*/build/
