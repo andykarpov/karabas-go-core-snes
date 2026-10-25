@@ -21,7 +21,7 @@
 
  OSD: kg_osd_overlay runs on clk_pix. It takes a command when osd_command changes, so the
  commands (of kg_mcu, clk_sys) cross as the words of an async fifo, each change once, and come
- out in the same order. Its position: lines of 800 clk and frames of 524 lines are counted in
+ out in the same order. Its position: lines of 800 clk and frames of 525 lines are counted in
  steps of 2, from the start of HS / VS: the 512 x 416 of the OSD in the middle of the window
  (HS + back porch = 144 clk, + 64 = 208 clk = 104 steps; VS + back porch = 35 lines, + 32 =
  67 = 33 steps).
@@ -32,7 +32,7 @@ module snes_core #(
 ) (
 	input wire clk_sys,
 	input wire clk_mem,
-	input wire clk_pix,             // the pixel clock of the output (25.10 MHz)
+	input wire clk_pix,             // the pixel clock of the output (25.21 MHz)
 	input wire areset,
 
 	// kg_mcu

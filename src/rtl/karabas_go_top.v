@@ -191,15 +191,15 @@ wire clk_mem = pll_clk[1];
 wire areset = ~locked;
 
 // the pixel clock of the 640 x 480 output: a second PLL
-// on clk_sys, VCO 21.429 x 41 = 878.6 MHz: clk_pix 878.6 / 35 = 25.10 MHz = clk_sys x 41 / 35 (snes_video: 1598 clk_pix per
-// SNES line). The same clock as on the Mini / Mini G.
+// on clk_sys, VCO 21.429 x 40 = 857.1 MHz: clk_pix 857.1 / 34 = 25.21 MHz = clk_sys x 40 / 34
+// (snes_video). The same clock as on the Mini / Mini G.
 wire [5:0] pix_clk;
 wire locked_pix;
 kg_pll #(
 	.CLKIN_PERIOD(46.667),
 	.DIVCLK_DIVIDE(1),
-	.CLKFBOUT_MULT(41),
-	.CLKOUT2_DIVIDE(35),
+	.CLKFBOUT_MULT(40),
+	.CLKOUT2_DIVIDE(34),
 	.IBUFG(0),
 	.BUFG_MASK(6'b000100)
 ) pll_pix(

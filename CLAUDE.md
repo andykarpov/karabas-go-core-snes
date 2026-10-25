@@ -10,7 +10,7 @@ The board modules (MCU link, memories, clocks, DACs, OSD, DVI) come from the git
 
 ## Build
 
-- `cd src && make` builds the boards of `BOARDS` in the Makefile (now `minig`: `make minig`, `make minig-xst`, `-impl`, `-core` one step, `make minig-report` the utilization and timing of the last build). It runs the ISE command-line flow and sources `/opt/Xilinx/14.7/ISE_DS/settings64.sh` (`ISE_SETTINGS=` to change it).
+- `cd src && make` builds the boards of `BOARDS` in the Makefile (now `go mini minig`: `make minig`, `make minig-xst`, `-impl`, `-core` one step, `make minig-report` the utilization and timing of the last build). It runs the ISE command-line flow and sources `/opt/Xilinx/14.7/ISE_DS/settings64.sh` (`ISE_SETTINGS=` to change it).
 - Inputs per board: `karabas_<board>_top.prj` (the source list, add new files here; the shared modules as `"../modules/rtl/..."`), `karabas_<board>_top.xst`, `karabas_<board>_top.ut`, `karabas_<board>.ucf` (pins from karabas-go-core-nes, then the timing block).
 - `core` packs `karabas_<board>_top.bin` with `core_minig.json` into `snes.kg3` with `make_core.py`, a symlink to karabas-go-tools (the sibling repo must be checked out next to this one). The json `osd` items are the soft switch registers in their order (`kg_soft_switches` in the top); Reset stays last.
 - Init files of memories are read by XST relative to `src/` (the DSPn ROMs: `rtl/snes/chip/DSP/dsp11b23410_*.txt`, made by `src/tools/mif2bin.py` from the `.mif` of upstream).
@@ -21,8 +21,8 @@ The board modules (MCU link, memories, clocks, DACs, OSD, DVI) come from the git
 - `src/rtl/snes/`: `rtl/` of SNES_FPGA at b7c50e5 (see docs/PLAN.md), the enhancement chips DSPn, OBC1, SRTC and the LoROM / HiROM mapper only. Local changes are marked `-- karabas:` / `// karabas:` and say why; keep the rest byte for byte as upstream (CRLF kept, `.gitattributes`), so it can be compared. `bram_kg.vhd` replaces `bram.vhd` (altsyncram) with the same entities as inferred memories.
 - `src/rtl/snes_system.v`: the SNES without the board: `main`, the requests to the memories (made at the falling clk_sys edge as in SNES.sv of the MiST core), the ROM loader (FILELOAD_* of kg_mcu through a small fifo), `snes_hdr.v` (finds the header in the SDRAM after a load: LoROM / HiROM / ExHiROM, copier header), the cartridge type, `snes_joy.v` (the controllers).
 - `src/rtl/mem/`: `snes_sdram.v` (ROM and WRAM), `snes_sram.v` (VRAM, ARAM, BSRAM, an io port), `snes_phase.v`. Both controllers run on clk_mem = 4 x clk_sys and answer at the clk_mem edge of a rising clk_sys edge only (`TS_MEM_ANSWER` of the ucf).
-- `src/rtl/video/snes_video.v`: the 15 kHz picture to 31 kHz with a line buffer and clk_sys as the pixel clock, the 640 x 480 DE window.
-- `src/rtl/karabas_minig_top.v`: clocks (`kg_pll`: clk_sys 21.484 MHz, clk_mem 85.94 MHz; `kg_dcm` x5 for the serialisers), `kg_mcu`, soft switches, joysticks, video -> `kg_osd_overlay` -> DVI, PCM5102.
+- `src/rtl/video/snes_video.v`: the 15 kHz picture as VESA 640 x 480 on clk_pix (25.21 MHz, a second PLL on clk_sys): a free running output timing (the syncs stay while the SNES is in reset), a ring of 4 line buffers, the frame locked to the SNES frame through the length of 256 lines after the lock event.
+- `src/rtl/karabas_{minig,mini,go}_top.v`: clocks (`kg_pll`: clk_sys 21.429 MHz, clk_mem 85.71 MHz; `pll_pix` on clk_sys: clk_pix 25.21 MHz; `kg_dcm` x5 of clk_pix for the serialisers), `kg_mcu`, `snes_core.v` (soft switches, joysticks, SNES, video, OSD), DVI (Mini G, Mini) or VGA (Go), the audio DACs.
 
 ## Simulation
 

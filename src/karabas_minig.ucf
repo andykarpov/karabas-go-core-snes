@@ -228,10 +228,10 @@ NET "FLASH_HOLD_N"     LOC="P12"    | IOSTANDARD = LVCMOS33; # CONF_IO3
 #
 # Clocks (kg_pll in the top), one PLL on CLK_50MHZ, VCO 600 MHz (50 * 12), phase 0:
 #   pll_clk<0> 21.43 MHz (/28) -> clk_sys: the SNES (main), the MCU link, the line buffer of the video, audio;
-#              the input of the second PLL (pll_pix, VCO 878.6 MHz = clk_sys x 41)
+#              the input of the second PLL (pll_pix, VCO 857.1 MHz = clk_sys x 40)
 #   pll_clk<1> 85.71 MHz (/7)  -> clk_mem = 4 x clk_sys: the SRAM and SDRAM controllers
-#   pix_clk<2> 25.10 MHz (/35) -> clk_pix: the 640 x 480 output (snes_video), OSD, DVI / VGA
-#   pix_clk<0>, <1> 125.5 MHz (/7, 0 / 180 degrees): the serialisers of DVI (Mini, Mini G)
+#   pix_clk<2> 25.21 MHz (/34) -> clk_pix: the 640 x 480 output (snes_video), OSD, DVI / VGA
+#   clk_pix x 5 (kg_dcm, 126.1 MHz and its inverse): the serialisers of DVI (Mini, Mini G)
 # The PERIOD of CLK_50MHZ is derived onto the PLL outputs, so the paths in each clock and from clk_pix to the
 # 5x clocks are analysed with their phases; clk_sys <-> clk_mem and clk_sys <-> clk_pix are bounded below.
 # ------------------------------------------------------------------------------------------------------------
@@ -257,8 +257,8 @@ TIMESPEC "TS_SYS_TO_MCU" = FROM "TG_CLK_SYS" TO "TG_CLK_MCU" 31.25 ns DATAPATHON
 TIMESPEC "TS_SYS_TO_MEM" = FROM "TG_CLK_SYS" TO "TG_CLK_MEM" 11.6 ns;
 TIMESPEC "TS_MEM_TO_SYS" = FROM "TG_CLK_MEM" TO "TG_CLK_SYS" 11.6 ns;
 
-# clk_sys <-> clk_pix (41 / 35 of one VCO, no useful phase): what crosses is the toggle of a new SNES line (two
-# clk_pix flip-flops) with the buffer line and flags of that line, which hold for the whole line (snes_video.v),
+# clk_sys <-> clk_pix (40 / 34 of one VCO, no useful phase): what crosses is the toggle of the first active line
+# of a SNES frame (two clk_pix flip-flops) with its buffer line and flags, which hold for the frame (snes_video.v),
 # and the OSD commands and the pointers of kg_async_fifo (Gray code, synchronisers); the line buffer has a port
 # in each clock. Their data paths are bounded by less than a period of the faster clock.
 NET "pix_clk<2>" TNM_NET = "TG_CLK_PIX";

@@ -172,31 +172,42 @@ wire clk_sys = pll_clk[0];
 wire clk_mem = pll_clk[1];
 wire areset = ~locked;
 
-// the pixel clock of the 640 x 480 output and the 5 x clock pair of the serialisers: a second PLL
-// on clk_sys, VCO 21.429 x 41 = 878.6 MHz: clk_hdmi / clk_hdmi_n 878.6 / 7 = 125.5 MHz (0 / 180
-// degrees), clk_pix 878.6 / 35 = 25.10 MHz = clk_sys x 41 / 35 (snes_video: 1598 clk_pix per
-// SNES line). DVI needs 25 MHz or more: the first build had clk_sys (21.4 MHz) as pixel clock.
+// the pixel clock of the 640 x 480 output: a second PLL on clk_sys, VCO 21.429 x 40 = 857.1 MHz,
+// clk_pix 857.1 / 34 = 25.21 MHz = clk_sys x 40 / 34 (snes_video: a SNES frame is 420432 clk_pix,
+// an output frame 420000, locked through 256 lines). DVI needs 25 MHz or more: the first build had
+// clk_sys (21.4 MHz) as pixel clock. The 5 x clock pair of the serialisers: a DCM on clk_pix, as in
+// the NES core (the PLL cannot have both: x 47 / 40 and its x 5 need a VCO of 1007 MHz, over 1000).
 wire [5:0] pix_clk;
-wire locked_hdmi;
+wire locked_pix;
 kg_pll #(
 	.CLKIN_PERIOD(46.667),
 	.DIVCLK_DIVIDE(1),
-	.CLKFBOUT_MULT(41),
-	.CLKOUT0_DIVIDE(7),
-	.CLKOUT1_DIVIDE(7),
-	.CLKOUT1_PHASE(180.0),
-	.CLKOUT2_DIVIDE(35),
+	.CLKFBOUT_MULT(40),
+	.CLKOUT2_DIVIDE(34),
 	.IBUFG(0),
-	.BUFG_MASK(6'b000111)
+	.BUFG_MASK(6'b000100)
 ) pll_pix(
 	.clk_in(clk_sys),
 	.rst(areset),
 	.clk_out(pix_clk),
-	.locked(locked_hdmi)
+	.locked(locked_pix)
 );
-wire clk_hdmi = pix_clk[0];
-wire clk_hdmi_n = pix_clk[1];
 wire clk_pix = pix_clk[2];
+
+wire clk_hdmi, clk_hdmi_n, locked_x5;
+kg_dcm #(
+	.CLKIN_PERIOD(39.667),
+	.CLKFX_MULTIPLY(5),
+	.CLKFX_DIVIDE(1)
+) pllx5(
+	.clk_in(clk_pix),
+	.rst(~locked_pix),
+	.clk_fx(clk_hdmi),
+	.clk_fx180(clk_hdmi_n),
+	.clk_0(),
+	.locked(locked_x5)
+);
+wire locked_hdmi = locked_pix & locked_x5;
 
 //---------- MCU ------------
 
