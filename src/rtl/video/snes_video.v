@@ -19,15 +19,21 @@
  read out as two output lines, one sample per output pixel; a picture of 512 x 448 (478) in the
  middle of 640 x 480, the first active sample of the line at x 64 of the window, black outside.
 
- Frame lock: the first active line of a SNES frame (crossed as a toggle) is expected near output
- line 49 (its two output lines are 51 and 52, a SNES line later, so the line is written whole
- before the read and is not overwritten while read). The distance d of the event from line 49
- clk 0 is added to the same frame, spread over the 256 lines 51..306 after the event (line 51 + i
- is 800 + floor((d + i) / 256) clk: they sum to d), so the next event comes at the same distance:
- the lock is reached in one frame and d is the difference of the frames. A SNES frame is 420432
- clk_pix (NTSC; PAL 500668 of 500000), so in the lock d is about +432 (+668) and these lines are
- 801 / 802 (802 / 803) clk, all others 800. An event further than a line from line 49 (the first
- frame, after a reset) sets the output to line 49 at once (one bad frame).
+ Frame lock: the first active line of a SNES frame (crossed as a toggle) is expected at output
+ line 49 clk 0 (its two output lines are 51 and 52, a SNES line later, so the line is written whole
+ before the read and is not overwritten while read). The frames of the SNES have two lengths
+ that alternate: NTSC 262 lines with a short line every other frame, interlace fields of 263 and
+ 262 lines (PAL 313 / 312), so the output frame after an event is made as long as the SNES frame
+ before the last one, P (event to event, clk_pix), plus the distance d of the event from line 49
+ clk 0: c = d + P - 420000 (PAL 500000) clk are added, spread over the 512 lines from line 51
+ (line 51 + i is 800 + floor((c + i) / 512) clk: they sum to c; the last ones are lines 0..37 of
+ the next frame), and the next event comes at line 49 again. In the lock c is about +433 (NTSC,
+ PAL +668; interlace +433 / +2038, PAL +668 / +2272), so these lines are 800 / 801 (up to 805),
+ lines 38..50 always 800. The first versions added d alone (the length of the last frame):
+ interlace fields came a SNES line off in turn, out of the window, and the output jumped to line
+ 49 every other frame (a monitor lost the picture). An event further than 3 lines
+ from line 49 (the first frame, after a reset) sets the output to line 49 at once (one bad frame);
+ without a P of the last frame (c out of range) c = d.
  A SNES frame of more than 287 lines (PAL) makes 625 output lines (50 Hz). No event during a frame:
  no lock, the picture is black.
 
@@ -117,31 +123,57 @@ reg second = 1'b0;             // the second output line of a SNES line
 reg [1:0] p_sel = 2'd0;        // the buffer of the first active line
 reg [9:0] act_x = 10'd100;
 reg pal = 1'b0;
-reg signed [11:0] d_cur = 12'sd0;
+reg signed [12:0] c_cur = 13'sd0;
 reg ev = 1'b0, locked = 1'b0;
+reg [19:0] p_cnt = 20'hFFFFF;  // clk since the last event (saturates)
+reg [19:0] p_last = 20'hFFFFF; // the SNES frame before: event to event
+reg c_on = 1'b0;               // the lines of the correction
+reg [8:0] ci = 9'd0;
 
 wire [9:0] oy_n = (oy == (pal ? 10'd624 : 10'd524)) ? 10'd0 : oy + 10'd1;
-wire in_corr = oy_n >= 10'd51 && oy_n < 10'd307;
-wire [9:0] corr_i = oy_n - 10'd51;
-wire signed [12:0] corr_sum = $signed({d_cur[11], d_cur}) + $signed({5'd0, corr_i[7:0]});
-wire signed [12:0] corr = corr_sum >>> 8;
-wire near = oy >= 10'd48 && oy <= 10'd50;
-wire signed [11:0] d_meas = $signed({2'b00, hx}) + (oy == 10'd48 ? -12'sd800 : oy == 10'd50 ? 12'sd800 : 12'sd0);
+wire ci_start = oy_n == 10'd51;
+wire [8:0] ci_n = ci_start ? 9'd0 : ci + 9'd1;
+wire on_n = ci_start || (c_on && ci != 9'd511);
+wire signed [13:0] corr_sum = $signed({c_cur[12], c_cur}) + $signed({5'd0, ci_n});
+wire signed [13:0] corr = corr_sum >>> 9;
+wire near = oy >= 10'd46 && oy <= 10'd52;
+reg signed [12:0] d_line;
+always @* begin
+	case (oy[3:0])
+	4'd14: d_line = -13'sd2400;    // 46
+	4'd15: d_line = -13'sd1600;
+	4'd0:  d_line = -13'sd800;
+	4'd2:  d_line = 13'sd800;
+	4'd3:  d_line = 13'sd1600;
+	4'd4:  d_line = 13'sd2400;     // 52
+	default: d_line = 13'sd0;      // 49
+	endcase
+end
+wire signed [12:0] d_meas = near ? $signed({3'b000, hx}) + d_line : 13'sd0;
+// c = d + P - the output frame; out of range (no P): d
+wire signed [21:0] c_full = $signed({{9{d_meas[12]}}, d_meas}) + $signed({2'b00, p_last})
+	- (f_pal ? 22'sd500000 : 22'sd420000);
+wire c_ok = c_full >= -22'sd4096 && c_full <= 22'sd4095;
 
 always @(posedge clk_pix) begin
 	tgl_s <= {tgl_s[1:0], frame_tgl};
+
+	if (p_cnt != 20'hFFFFF) p_cnt <= p_cnt + 20'd1;
 
 	if (frame_ev && !near) begin
 		// out of lock: start line 49 now
 		hx <= 10'd0;
 		hlast <= 10'd799;
 		oy <= 10'd49;
+		c_on <= 1'b0;
 	end else if (hx == hlast) begin
 		hx <= 10'd0;
 		oy <= oy_n;
-		hlast <= in_corr ? 10'd799 + corr[9:0] : 10'd799;
+		c_on <= on_n;
+		ci <= ci_n;
+		hlast <= on_n ? 10'd799 + corr[9:0] : 10'd799;
 		if (oy_n == 10'd0) begin
-			if (!ev) d_cur <= 12'sd0;
+			if (!ev) c_cur <= 13'sd0;
 			ev <= 1'b0;
 			locked <= ev;
 		end
@@ -156,7 +188,9 @@ always @(posedge clk_pix) begin
 		hx <= hx + 10'd1;
 
 	if (frame_ev) begin
-		d_cur <= near ? d_meas : 12'sd0;
+		c_cur <= c_ok ? c_full[12:0] : d_meas;
+		p_cnt <= 20'd1;
+		p_last <= p_cnt;
 		ev <= 1'b1;
 		p_sel <= f_sel;
 		act_x <= f_act_x;
