@@ -176,6 +176,8 @@ DSPn стоит всего ~80 LUT, но 20 RAMB16 (ПЗУ программы 80
 
 ## Ф4. Mini и Go
 
+*Сделано (сборка 26102502, не проверено на железе)*: `karabas_mini_top.v` (DVI, сигма-дельта на AUDIO_L/R), `karabas_go_top.v` (VGA через ЦАП платы, `V_CLK` = clk_pix, PCM5102); общая часть — `rtl/snes_core.v`. Все три платы: ~12,6k LUT (83–84 %), слайсы 98–99 %, все ограничения выполнены. Видео всех плат — VESA 640 x 480 на clk_pix 25,10 МГц (второй PLL), см. `snes_video.v`.
+
 - Перенос логики в `karabas_mini_top.v` (sigma-delta, ADC не нужен) и `karabas_go_top.v` (VGA вместо HDMI: те же 31 кГц сигналы на `VGA_R/G/B`, без DCM). Общая логика ядра — в общий модуль (`snes_system.v`, как `nes_system.v`), чтобы три верха не расходились.
 - `core.json` / `core_mini.json` → `snes.kg1` / `kg2` / `kg3` в релиз.
 
