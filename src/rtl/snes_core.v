@@ -14,7 +14,9 @@
 
  Joysticks: kg_mcu bits (karabas-go-firmware docs/protocol.md): 1 up, 2 down, 3 left, 4 right,
  5 start, 6 A, 7 B, 8 C, 9 X, 10 Y, 11 Z, 12 mode. SNES (snes_joy order): B = A, Y = X,
- Select = mode, Start = start, the directions, A = B, X = Y, L = C, R = Z.
+ Select = mode, Start = start, the directions, A = B, X = Y, L = C, R = Z. The USB keyboard
+ (snes_kbd) gives the same bits, ORed with the joysticks: pad 1 on the arrows and Z X A S Q W,
+ Enter, Space; pad 2 on I J K L and O P 9 0 8 -, M, N.
 
  Video out (clk_pix): 640 x 480 with the timing of VESA 640 x 480 (snes_video), rgb with the
  OSD; hs / vs active high; hs, vs, de and rgb in the same clk.
@@ -23,7 +25,8 @@
  commands (of kg_mcu, clk_sys) cross as the words of an async fifo, each change once, and come
  out in the same order. Its position: lines of 800 clk and frames of 525 lines are counted in
  steps of 2, from the start of HS / VS: the 512 x 416 of the OSD in the middle of the window
- (HS + back porch = 144 clk, + 64 = 208 clk = 104 steps; VS + back porch = 35 lines, + 32 =
+ (HS + back porch = 144 clk, + 64 = 208 clk = 104 steps, less a character of 8 steps that the
+ monitor showed to the right: 96; VS + back porch = 35 lines, + 32 =
  67 = 33 steps).
 */
 
@@ -41,6 +44,12 @@ module snes_core #(
 	input wire mcu_busy,
 	input wire [12:0] joy_l,
 	input wire [12:0] joy_r,
+	input wire [7:0] kb_dat0,       // the keys of the HID report (snes_kbd)
+	input wire [7:0] kb_dat1,
+	input wire [7:0] kb_dat2,
+	input wire [7:0] kb_dat3,
+	input wire [7:0] kb_dat4,
+	input wire [7:0] kb_dat5,
 	input wire load_active,
 	input wire [31:0] load_addr,
 	input wire [7:0] load_data,
@@ -86,8 +95,17 @@ function [11:0] snes_pad;
 		snes_pad = {j[11], j[8], j[10], j[7], j[4], j[3], j[2], j[1], j[5], j[12], j[9], j[6]};
 	end
 endfunction
-wire [11:0] pad1 = snes_pad(joy_swap ? joy_r : joy_l);
-wire [11:0] pad2 = snes_pad(joy_swap ? joy_l : joy_r);
+wire [12:0] kb_l, kb_r;
+snes_kbd kbd(
+	.clk(clk_sys),
+	.kb_dat0(kb_dat0), .kb_dat1(kb_dat1), .kb_dat2(kb_dat2),
+	.kb_dat3(kb_dat3), .kb_dat4(kb_dat4), .kb_dat5(kb_dat5),
+	.kb_l(kb_l), .kb_r(kb_r)
+);
+wire [12:0] in_l = joy_l | kb_l;
+wire [12:0] in_r = joy_r | kb_r;
+wire [11:0] pad1 = snes_pad(joy_swap ? in_r : in_l);
+wire [11:0] pad2 = snes_pad(joy_swap ? in_l : in_r);
 
 wire [7:0] snes_r, snes_g, snes_b;
 wire snes_hs, snes_hblank_n, snes_vblank_n;
@@ -160,7 +178,7 @@ kg_async_fifo #(.DW(16), .AW(4)) osd_cmd_fifo(
 always @(posedge clk_pix)
 	osd_cmd_rd <= !osd_cmd_empty && !osd_cmd_rd;
 
-kg_osd_overlay #(.H_OFFSET(104), .V_OFFSET(33)) osd(
+kg_osd_overlay #(.H_OFFSET(96), .V_OFFSET(33)) osd(
 	.clk(clk_pix),
 	.rgb_i({v_r, v_g, v_b}),
 	.rgb_o(rgb),

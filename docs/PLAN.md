@@ -174,6 +174,10 @@ DSPn стоит всего ~80 LUT, но 20 RAMB16 (ПЗУ программы 80
 - Симуляция: verilator-обвязка snestang (`verilator/`, SDL) как образец — прогон ROM, кадры в файл; тестовые ROM: PeterLemon (CPU / PPU / SPC700), blargg `spc_*`, `krom`; затем игры: Super Mario World (LoROM, BSRAM), Zelda ALttP (BSRAM), Super Metroid, DKC (HiROM 4 МБ), Chrono Trigger (HiROM 4 МБ), Tales of Phantasia (ExHiROM).
 - Тайминг: «All constraints were met», LUT / слайсы — в `CLAUDE.md` после каждой сборки.
 
+*Проверено на железе (Mini G, сборка 26102503, 2026-10-25)*: картинка 640 x 480 на мониторе автора (скейлер под матрицу iPad 3, требовательный к таймингу), OSD (был на знакоместо правее — `H_OFFSET` 104 → 96 в 26102504), игры грузятся и идут. Звук по HDMI нет (выход DVI), на PCM5102 — тот же `kg_pcm5102` и пины, что у NES. Клавиатура (как `hid_parser` NES) — `rtl/snes_kbd.v` с 26102504. Джойстики ещё не проверены.
+
+Не сделано: HDMI-аудио — нужен лёгкий передатчик (zhdmi 2240 LUT, свободно ~2,3k LUT при слайсах 99 %).
+
 ## Ф4. Mini и Go
 
 *Сделано (сборка 26102502, не проверено на железе)*: `karabas_mini_top.v` (DVI, сигма-дельта на AUDIO_L/R), `karabas_go_top.v` (VGA через ЦАП платы, `V_CLK` = clk_pix, PCM5102); общая часть — `rtl/snes_core.v`. Все три платы: ~12,6k LUT (83–84 %), слайсы 98–99 %, все ограничения выполнены. Видео всех плат — VESA 640 x 480 на clk_pix 25,10 МГц (второй PLL), см. `snes_video.v`.
