@@ -439,6 +439,7 @@ wire bsram_rd = ~BSRAM_CE_N & (~BSRAM_RD_N || rom_type[7:4] == 4'hC);
 wire bsram_wr = ~BSRAM_CE_N & ~BSRAM_WE_N;
 reg bsram_rdD = 1'b0, bsram_wrD = 1'b0;
 reg bsram_req = 1'b0;
+reg [7:0] bsram_din = 8'd0;  // BSRAM_D of the last falling clk_sys edge (see below)
 reg [19:0] bsram_sd_addr = 20'd0;
 reg bsram_we = 1'b0;
 wire bsram_ack;
@@ -472,6 +473,11 @@ always @(negedge clk_sys) begin
 		aram_addr_sd <= ARAM_ADDR;
 		aram_din <= ARAM_D;
 	end
+
+	// karabas: the MiST core gives the controller BSRAM_D itself ("OBC1 doesn't like" a copy taken
+	// with the request); a copy at every falling edge is the same value a little earlier, and keeps
+	// the logic of the CPU out of the paths into clk_mem
+	bsram_din <= BSRAM_D;
 
 	if (RESET_N) begin
 		bsram_rdD <= bsram_rd;
@@ -520,7 +526,7 @@ snes_sram sram(
 	.vram2_we(~vram2_we_nD), .vram2_dout(VRAM2_Q),
 	.aram_req(aram_req), .aram_ack(aram_ack), .aram_addr(aram_addr_sd), .aram_din(aram_din),
 	.aram_we(aram_wr_last), .aram_dout(aram_dout),
-	.bsram_req(bsram_req), .bsram_ack(bsram_ack), .bsram_addr(bsram_sd_addr), .bsram_din(BSRAM_D),
+	.bsram_req(bsram_req), .bsram_ack(bsram_ack), .bsram_addr(bsram_sd_addr), .bsram_din(bsram_din),
 	.bsram_we(bsram_we), .bsram_dout(bsram_dout),
 	.io_req(1'b0), .io_ack(), .io_addr(22'd0), .io_word(1'b0), .io_din(16'd0), .io_we(1'b0), .io_dout(),
 	.MA(MA), .MD(MD), .MWR_N(MWR_N), .MRD_N(MRD_N)

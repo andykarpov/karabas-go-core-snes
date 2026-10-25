@@ -148,16 +148,17 @@ assign FT_CLK_OUT = 1'b0;
 
 //---------- clocks ------------
 
-// 50 MHz * 55 / 4 = 687.5 MHz VCO: clk_sys 687.5 / 32 = 21.484 MHz (the SNES master clock, NTSC
-// 21.477 + 0.03 %), clk_mem 687.5 / 8 = 85.94 MHz = 4 x clk_sys, phase 0 (the memories)
+// 50 MHz * 12 = 600 MHz VCO: clk_sys 600 / 28 = 21.429 MHz (the SNES master clock, NTSC 21.477
+// - 0.22 %: 59.97 Hz frames; the PFD of the PLL needs 19 MHz or more, so DIVCLK_DIVIDE is 1 or 2
+// and this is the closest 4:1 pair), clk_mem 600 / 7 = 85.71 MHz = 4 x clk_sys, phase 0
 wire [5:0] pll_clk;
 wire locked;
 kg_pll #(
 	.CLKIN_PERIOD(20.0),
-	.DIVCLK_DIVIDE(4),
-	.CLKFBOUT_MULT(55),
-	.CLKOUT0_DIVIDE(32),
-	.CLKOUT1_DIVIDE(8),
+	.DIVCLK_DIVIDE(1),
+	.CLKFBOUT_MULT(12),
+	.CLKOUT0_DIVIDE(28),
+	.CLKOUT1_DIVIDE(7),
 	.BUFG_MASK(6'b000011)
 ) pll(
 	.clk_in(CLK_50MHZ),
@@ -172,7 +173,7 @@ wire areset = ~locked;
 // hdmi serial clock: 5 x clk_sys (the pixel clock) and its inverse
 wire clk_hdmi, clk_hdmi_n, locked_hdmi;
 kg_dcm #(
-	.CLKIN_PERIOD(46.545),
+	.CLKIN_PERIOD(46.667),
 	.CLKFX_MULTIPLY(5),
 	.CLKFX_DIVIDE(1)
 ) dcm_hdmi(
@@ -298,64 +299,31 @@ kg_mcu #(
 	.FLASHBOOT_COREID(5'd0)
 );
 
-//---------- Soft switches (the osd items of core_minig.json, in their order) ------------
+//---------- SNES: soft switches, joysticks, the SNES, 31 kHz video, OSD ------------
 
-// 0 ROM type (Auto, LoROM, HiROM, ExHiROM), 1 Region (Auto, NTSC, PAL), 2 Swap joysticks, 3 Reset
-wire [31:0] softsw_regs;
-kg_soft_switches #(.N(4)) soft_switches(
-	.clk(clk_sys),
-	.command(softsw_command),
-	.regs(softsw_regs),
-	.upd()
-);
-wire [1:0] rom_sel = softsw_regs[1:0];
-wire [1:0] region_sel = softsw_regs[9:8];
-wire joy_swap = softsw_regs[16];
-wire osd_reset = softsw_regs[24];
-
-//---------- joysticks ------------
-
-// kg_mcu joystick bits (karabas-go-firmware docs/protocol.md): 1 up, 2 down, 3 left, 4 right,
-// 5 start, 6 A, 7 B, 8 C, 9 X, 10 Y, 11 Z, 12 mode. SNES (snes_joy order): B = A, Y = X, Select =
-// mode, Start = start, the directions, A = B, X = Y, L = C, R = Z.
-function [11:0] snes_pad;
-	input [12:0] j;
-	begin
-		snes_pad = {j[11], j[8], j[10], j[7], j[4], j[3], j[2], j[1], j[5], j[12], j[9], j[6]};
-	end
-endfunction
-wire [11:0] pad1 = snes_pad(joy_swap ? joy_r : joy_l);
-wire [11:0] pad2 = snes_pad(joy_swap ? joy_l : joy_r);
-
-//---------- SNES ------------
-
-wire [7:0] snes_r, snes_g, snes_b;
-wire snes_hs, snes_vs, snes_hblank_n, snes_vblank_n;
+wire [23:0] osd_rgb;
+wire hd_hs, hd_vs, hd_de;
 wire [15:0] audio_l, audio_r;
 
-snes_system #(.USE_DSPN(1)) snes(
+snes_core #(.USE_DSPN(1)) core(
 	.clk_sys(clk_sys),
 	.clk_mem(clk_mem),
-	.reset(osd_reset | mcu_busy | areset),
-	.rom_sel(rom_sel),
-	.region_sel(region_sel),
+	.areset(areset),
+	.softsw_command(softsw_command),
+	.osd_command(osd_command),
+	.mcu_busy(mcu_busy),
+	.joy_l(joy_l),
+	.joy_r(joy_r),
 	.load_active(fileloader_active),
 	.load_addr(fileloader_addr),
 	.load_data(fileloader_data),
 	.load_wr(fileloader_wr),
-	.pad1(pad1),
-	.pad2(pad2),
-	.R(snes_r),
-	.G(snes_g),
-	.B(snes_b),
-	.HSYNC(snes_hs),
-	.VSYNC(snes_vs),
-	.HBLANKn(snes_hblank_n),
-	.VBLANKn(snes_vblank_n),
-	.pal(),
+	.rgb(osd_rgb),
+	.hs(hd_hs),
+	.vs(hd_vs),
+	.de(hd_de),
 	.audio_l(audio_l),
 	.audio_r(audio_r),
-	.running(),
 	.MA(MA),
 	.MD(MD),
 	.MWR_N(MWR_N),
@@ -370,34 +338,7 @@ snes_system #(.USE_DSPN(1)) snes(
 	.SDR_DQ(SDR_DQ)
 );
 
-//---------- video: 31 kHz, OSD, HDMI ------------
-
-wire [7:0] v_r, v_g, v_b;
-wire v_hs, v_vs, v_de;
-snes_video video(
-	.clk(clk_sys),
-	.r_in(snes_r), .g_in(snes_g), .b_in(snes_b),
-	.hsync_in(snes_hs), .vsync_in(snes_vs), .hblank_n(snes_hblank_n), .vblank_n(snes_vblank_n),
-	.r(v_r), .g(v_g), .b(v_b), .hs(v_hs), .vs(v_vs), .de(v_de)
-);
-
-wire [23:0] osd_rgb;
-kg_osd_overlay osd(
-	.clk(clk_sys),
-	.rgb_i({v_r, v_g, v_b}),
-	.rgb_o(osd_rgb),
-	.hsync_i(v_hs),
-	.vsync_i(v_vs),
-	.osd_command(osd_command)
-);
-
-// the overlay is one clk late: the syncs and DE with it
-reg hd_hs = 1'b0, hd_vs = 1'b0, hd_de = 1'b0;
-always @(posedge clk_sys) begin
-	hd_hs <= v_hs;
-	hd_vs <= v_vs;
-	hd_de <= v_de;
-end
+//---------- DVI ------------
 
 // DVI (no HDMI audio for now: hdmi_tx of zhdmi is 2240 LUTs, the core does not fit with it; the
 // sound is on the PCM5102 output). 640 x 480: negative syncs.
