@@ -18,8 +18,9 @@
  (snes_kbd) gives the same bits, ORed with the joysticks: pad 1 on the arrows and Z X A S Q W,
  Enter, Space; pad 2 on I J K L and O P 9 0 8 -, M, N.
 
- Video out (clk_pix): 640 x 480 with the timing of VESA 640 x 480 (snes_video), rgb with the
- OSD; hs / vs active high; hs, vs, de and rgb in the same clk.
+ Video out (clk_pix): 640 x 480 with the timing of VESA 640 x 480, PAL 720 x 576 with the timing
+ of CEA 576p (snes_video), rgb with the OSD; hs / vs active high; hs, vs, de and rgb in the same
+ clk. pal (clk_sys) is the mode: the top makes clk_pix 25.21 MHz for 0, 27.27 MHz for 1.
 
  OSD: kg_osd_overlay runs on clk_pix. It takes a command when osd_command changes, so the
  commands (of kg_mcu, clk_sys) cross as the words of an async fifo, each change once, and come
@@ -27,7 +28,7 @@
  steps of 2, from the start of HS / VS: the 512 x 416 of the OSD in the middle of the window
  (HS + back porch = 144 clk, + 64 = 208 clk = 104 steps, less a character of 8 steps that the
  monitor showed to the right: 96; VS + back porch = 35 lines, + 32 =
- 67 = 33 steps).
+ 67 = 33 steps). In PAL snes_video gives it syncs moved to the same place to the picture.
 */
 
 module snes_core #(
@@ -59,6 +60,7 @@ module snes_core #(
 	output reg hs = 1'b0,
 	output reg vs = 1'b0,
 	output reg de = 1'b0,
+	output wire pal,                // the video mode (clk_sys): 0 NTSC 640 x 480, 1 PAL 720 x 576
 	output wire [15:0] audio_l,
 	output wire [15:0] audio_r,
 
@@ -129,7 +131,7 @@ snes_system #(.USE_DSPN(USE_DSPN)) snes(
 	.VSYNC(),
 	.HBLANKn(snes_hblank_n),
 	.VBLANKn(snes_vblank_n),
-	.pal(),
+	.pal(pal),
 	.audio_l(audio_l),
 	.audio_r(audio_r),
 	.running(),
@@ -148,13 +150,15 @@ snes_system #(.USE_DSPN(USE_DSPN)) snes(
 );
 
 wire [7:0] v_r, v_g, v_b;
-wire v_hs, v_vs, v_de;
+wire v_hs, v_vs, v_de, v_osd_hs, v_osd_vs;
 snes_video video(
 	.clk_sys(clk_sys),
 	.clk_pix(clk_pix),
 	.r_in(snes_r), .g_in(snes_g), .b_in(snes_b),
 	.hsync_in(snes_hs), .hblank_n(snes_hblank_n), .vblank_n(snes_vblank_n),
-	.r(v_r), .g(v_g), .b(v_b), .hs(v_hs), .vs(v_vs), .de(v_de)
+	.pal(pal),
+	.r(v_r), .g(v_g), .b(v_b), .hs(v_hs), .vs(v_vs), .de(v_de),
+	.osd_hs(v_osd_hs), .osd_vs(v_osd_vs)
 );
 
 // osd_command into clk_pix
@@ -182,8 +186,8 @@ kg_osd_overlay #(.H_OFFSET(96), .V_OFFSET(33)) osd(
 	.clk(clk_pix),
 	.rgb_i({v_r, v_g, v_b}),
 	.rgb_o(rgb),
-	.hsync_i(v_hs),
-	.vsync_i(v_vs),
+	.hsync_i(v_osd_hs),
+	.vsync_i(v_osd_vs),
 	.osd_command(osd_cmd_q)
 );
 

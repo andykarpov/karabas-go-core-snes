@@ -150,7 +150,8 @@ assign FT_CLK_OUT = 1'b0;
 
 // 50 MHz * 12 = 600 MHz VCO: clk_sys 600 / 28 = 21.429 MHz (the SNES master clock, NTSC 21.477
 // - 0.22 %: 59.97 Hz frames; the PFD of the PLL needs 19 MHz or more, so DIVCLK_DIVIDE is 1 or 2
-// and this is the closest 4:1 pair), clk_mem 600 / 7 = 85.71 MHz = 4 x clk_sys, phase 0
+// and this is the closest 4:1 pair), clk_mem 600 / 7 = 85.71 MHz = 4 x clk_sys, phase 0;
+// 600 / 22 = 27.27 MHz: clk_pix of PAL (below)
 wire [5:0] pll_clk;
 wire locked;
 kg_pll #(
@@ -159,6 +160,7 @@ kg_pll #(
 	.CLKFBOUT_MULT(12),
 	.CLKOUT0_DIVIDE(28),
 	.CLKOUT1_DIVIDE(7),
+	.CLKOUT2_DIVIDE(22),
 	.BUFG_MASK(6'b000011)
 ) pll(
 	.clk_in(CLK_50MHZ),
@@ -183,14 +185,31 @@ kg_pll #(
 	.CLKFBOUT_MULT(40),
 	.CLKOUT2_DIVIDE(34),
 	.IBUFG(0),
-	.BUFG_MASK(6'b000100)
+	.BUFG_MASK(6'b000000)
 ) pll_pix(
 	.clk_in(clk_sys),
 	.rst(areset),
 	.clk_out(pix_clk),
 	.locked(locked_pix)
 );
-wire clk_pix = pix_clk[2];
+
+// PAL: CEA 576p on 600 / 22 = 27.27 MHz = clk_sys x 28 / 22 (a SNES PAL frame is 541632 clk_pix, an
+// output frame 864 x 625 = 540000), from pll; the 800 x 625 of 25.21 MHz before was no standard
+// mode and a monitor did not show it. A BUFGMUX takes it while the SNES is PAL (vid_pal of the
+// core: the region of the cartridge or of the OSD, constant while a game runs).
+wire vid_pal;
+wire clk_pix;
+BUFGMUX #(.CLK_SEL_TYPE("SYNC")) clk_pix_mux(.I0(pix_clk[2]), .I1(pll_clk[2]), .S(vid_pal), .O(clk_pix));
+
+// the DCM loses its lock when clk_pix changes: a reset of 256 clk_sys after a change of the mode
+reg vid_pal_d = 1'b0;
+reg [7:0] x5_rst_cnt = 8'd0;
+always @(posedge clk_sys) begin
+	vid_pal_d <= vid_pal;
+	if (vid_pal != vid_pal_d) x5_rst_cnt <= 8'd255;
+	else if (x5_rst_cnt != 8'd0) x5_rst_cnt <= x5_rst_cnt - 8'd1;
+end
+wire x5_rst = x5_rst_cnt != 8'd0;
 
 wire clk_hdmi, clk_hdmi_n, locked_x5;
 kg_dcm #(
@@ -199,7 +218,7 @@ kg_dcm #(
 	.CLKFX_DIVIDE(1)
 ) pllx5(
 	.clk_in(clk_pix),
-	.rst(~locked_pix),
+	.rst(~locked_pix | x5_rst),
 	.clk_fx(clk_hdmi),
 	.clk_fx180(clk_hdmi_n),
 	.clk_0(),
@@ -351,6 +370,7 @@ snes_core #(.USE_DSPN(1)) core(
 	.hs(hd_hs),
 	.vs(hd_vs),
 	.de(hd_de),
+	.pal(vid_pal),
 	.audio_l(audio_l),
 	.audio_r(audio_r),
 	.MA(MA),
