@@ -196,7 +196,7 @@ kg_pll #(
 // PAL: CEA 576p on 600 / 22 = 27.27 MHz = clk_sys x 28 / 22 (a SNES PAL frame is 541632 clk_pix, an
 // output frame 864 x 625 = 540000), from pll; the 800 x 625 of 25.21 MHz before was no standard
 // mode and a monitor did not show it. A BUFGMUX takes it while the SNES is PAL (vid_pal of the
-// core: the region of the cartridge or of the OSD, constant while a game runs).
+// core: PAL chosen in the OSD; auto is NTSC, constant while a game runs).
 wire vid_pal;
 wire clk_pix;
 BUFGMUX #(.CLK_SEL_TYPE("SYNC")) clk_pix_mux(.I0(pix_clk[2]), .I1(pll_clk[2]), .S(vid_pal), .O(clk_pix));

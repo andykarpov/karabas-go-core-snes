@@ -1,7 +1,7 @@
 {
     "id": "snes",
     "name": "SNES",
-    "build": "26102600",
+    "build": "26103001",
     "bitstream": "karabas_minig_top.bin",
     "visible": true,
     "type": "fileloader",

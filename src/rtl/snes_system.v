@@ -31,7 +31,7 @@ module snes_system #(
 
 	input wire reset,               // OSD / keyboard reset (level)
 	input wire [1:0] rom_sel,       // 0 auto, 1 LoROM, 2 HiROM, 3 ExHiROM
-	input wire [1:0] region_sel,    // 0 auto, 1 NTSC, 2 PAL
+	input wire [1:0] region_sel,    // 0 auto (NTSC), 1 NTSC, 2 PAL
 
 	input wire load_active,
 	input wire [31:0] load_addr,
@@ -142,8 +142,10 @@ always @(posedge clk_sys) begin
 	// (1024 << size) - 1 of SNES.sv as a table (a variable 24-bit shift is two barrel shifters)
 	rom_mask <= mask_of((h_rom_size < 4'd7) ? 4'hC : h_rom_size);
 	ram_mask <= h_ram_size ? mask_of(h_ram_size) : 24'd0;
-	pal_r <= region_sel == 2'd2 ? 1'b1 : region_sel == 2'd1 ? 1'b0 :
-		(h_region >= 8'h02 && h_region <= 8'h0C) || h_region == 8'h11;
+	// karabas: auto is NTSC, also for a PAL cartridge (the region of the header is not used): a
+	// monitor that shows 60 Hz only gets 640 x 480 always; a PAL game runs ~20 % fast. PAL (576p)
+	// only when chosen in the OSD.
+	pal_r <= region_sel == 2'd2;
 
 	rom_type <= {6'd0, lhrom};
 	//DSP3
