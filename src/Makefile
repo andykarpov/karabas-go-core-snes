@@ -29,8 +29,12 @@ JSON_go = core.json
 JSON_mini = core_mini.json
 JSON_minig = core_minig.json
 
-# map / par options (as the .xise projects had them, the same on the three boards)
-MAP = -logic_opt off -ol high -xe n -t 1 -xt 0 -register_duplication off -r 4 -global_opt off -mt 2 -detail -ir off -pr b -lc off -power off
+# map / par options (as the .xise projects had them, the same on the three boards); the cost table
+# per board: 2 first (the one that routes best on these cores), Mini G stays on 1 of its build 26103002
+MAP_T_go ?= 2
+MAP_T_mini ?= 2
+MAP_T_minig ?= 1
+MAP = -logic_opt off -ol high -xe n -xt 0 -register_duplication off -r 4 -global_opt off -mt 2 -detail -ir off -pr b -lc off -power off
 PAR = -ol high -xe n -mt 4
 
 # included or read by the sources, not in the prj
@@ -49,7 +53,7 @@ karabas_$(1)_top.ngc: karabas_$(1)_top.prj karabas_$(1)_top.xst $$(SRC_$(1)) $(I
 
 karabas_$(1)_top.bin: karabas_$(1)_top.ngc karabas_$(1).ucf karabas_$(1)_top.ut
 	$(XIL) ngdbuild -intstyle ise -dd _ngo -nt timestamp -uc karabas_$(1).ucf -p $(PART) karabas_$(1)_top.ngc karabas_$(1)_top.ngd
-	$(XIL) map -intstyle ise -p $(PART) -w $(MAP) -o karabas_$(1)_top_map.ncd karabas_$(1)_top.ngd karabas_$(1)_top.pcf
+	$(XIL) map -intstyle ise -p $(PART) -w $(MAP) -t $(MAP_T_$(1)) -o karabas_$(1)_top_map.ncd karabas_$(1)_top.ngd karabas_$(1)_top.pcf
 	$(XIL) par -w -intstyle ise $(PAR) karabas_$(1)_top_map.ncd karabas_$(1)_top.ncd karabas_$(1)_top.pcf
 	$(XIL) trce -intstyle ise -v 3 -s 2 -n 3 -fastpaths -xml karabas_$(1)_top.twx karabas_$(1)_top.ncd -o karabas_$(1)_top.twr karabas_$(1)_top.pcf -ucf karabas_$(1).ucf
 	$(XIL) bitgen -intstyle ise -f karabas_$(1)_top.ut karabas_$(1)_top.ncd
