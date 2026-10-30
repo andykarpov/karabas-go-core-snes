@@ -22,12 +22,13 @@ The board modules (MCU link, memories, clocks, DACs, OSD, DVI) come from the git
 - `src/rtl/snes_system.v`: the SNES without the board: `main`, the requests to the memories (made at the falling clk_sys edge as in SNES.sv of the MiST core), the ROM loader (FILELOAD_* of kg_mcu through a small fifo), `snes_hdr.v` (finds the header in the SDRAM after a load: LoROM / HiROM / ExHiROM, copier header), the cartridge type, `snes_joy.v` (the controllers).
 - `src/rtl/mem/`: `snes_sdram.v` (ROM and WRAM), `snes_sram.v` (VRAM, ARAM, BSRAM, an io port), `snes_phase.v`. Both controllers run on clk_mem = 4 x clk_sys and answer at the clk_mem edge of a rising clk_sys edge only (`TS_MEM_ANSWER` of the ucf).
 - `src/rtl/video/snes_video.v`: the 15 kHz picture as VESA 640 x 480 on clk_pix (25.21 MHz, a second PLL on clk_sys), PAL as CEA 576p (clk_pix 27.27 MHz from the main PLL, a BUFGMUX on the region): a free running output timing (the syncs stay while the SNES is in reset), a ring of 4 line buffers, each output frame as long as the SNES frame before the last (interlace fields alternate) plus the distance of the lock event, spread over 512 lines.
-- `src/rtl/karabas_{minig,mini,go}_top.v`: clocks (`kg_pll`: clk_sys 21.429 MHz, clk_mem 85.71 MHz; `pll_pix` on clk_sys: clk_pix 25.21 MHz, PAL 27.27 MHz of `kg_pll` through a BUFGMUX; `kg_dcm` x5 of clk_pix for the serialisers), `kg_mcu`, `snes_core.v` (soft switches, joysticks, SNES, video, OSD), DVI (Mini G, Mini) or VGA (Go), the audio DACs.
+- `src/rtl/karabas_{minig,mini,go}_top.v`: clocks (`kg_pll`: clk_sys 21.429 MHz, clk_mem 85.71 MHz; `pll_pix` on clk_sys: clk_pix 25.21 MHz, PAL 27.27 MHz of `kg_pll` through a BUFGMUX; `kg_dcm` x5 of clk_pix for the serialisers), `kg_mcu`, `snes_core.v` (soft switches, joysticks, SNES, video, OSD), HDMI (Mini G, Mini) or VGA (Go), the audio DACs.
+- `src/rtl/video/snes_hdmi.v`: HDMI of Mini G and Mini, its own small encoder (zhdmi does not fit): the video delayed 11 clk for the preambles and guard bands, an island a line after HS (ACR or AVI / Audio InfoFrame, then the samples of the DSP as they are, ~32 kHz, CTS counted over 32 samples), plain DVI when `DVI_ONLY` of `kg_mcu` (the firmware setting).
 
 ## Simulation
 
 - `src/sim/mem/run_mem_sim.sh` (iverilog): the memory controllers against models of the chips with the delays of the board, several ports at once, every read checked, a watchdog for lost requests; outside the timing windows the tests must fail (they print so).
-- `src/sim/sys/run_sys_sim.sh` (iverilog): `tb_hdr.v`, the header detection on built images.
+- `src/sim/sys/run_sys_sim.sh` (iverilog): `tb_hdr.v`, the header detection on built images; `tb_video.v`, `tb_kbd.v`; `tb_hdmi.v` decodes the TMDS words of `snes_hdmi` (pixels, preambles, guard bands, the ECC and content of each packet, every sample in order; ~6 min).
 - `src/sim/eq/run_eq.sh` (ghdl): the karabas changes of upstream VHDL against the originals in `sim/eq/ref` (the microcode tables).
 - A test is only worth something if it fails without the code it covers: break the module in a scratch copy and see the test fail (each of the tests above was checked so).
 

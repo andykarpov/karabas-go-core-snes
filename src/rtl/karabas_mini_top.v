@@ -200,6 +200,7 @@ kg_pll #(
 // mode and a monitor did not show it. A BUFGMUX takes it while the SNES is PAL (vid_pal of the
 // core: PAL chosen in the OSD; auto is NTSC, constant while a game runs).
 wire vid_pal;
+wire dvi_only;                  // kg_mcu (the firmware setting): no HDMI islands (snes_hdmi)
 wire clk_pix;
 BUFGMUX #(.CLK_SEL_TYPE("SYNC")) clk_pix_mux(.I0(pix_clk[2]), .I1(pll_clk[2]), .S(vid_pal), .O(clk_pix));
 
@@ -315,7 +316,7 @@ kg_mcu #(
 	.SD2_SCK(SD_CLK),
 
 	.HWID(),
-	.DVI_ONLY(),
+	.DVI_ONLY(dvi_only),
 
 	.DEBUG_ADDR(16'h00),
 	.DEBUG_DATA(),
@@ -347,6 +348,7 @@ kg_mcu #(
 wire [23:0] osd_rgb;
 wire hd_hs, hd_vs, hd_de;
 wire [15:0] audio_l, audio_r;
+wire audio_lrck;
 
 snes_core #(.USE_DSPN(1)) core(
 	.clk_sys(clk_sys),
@@ -375,6 +377,7 @@ snes_core #(.USE_DSPN(1)) core(
 	.pal(vid_pal),
 	.audio_l(audio_l),
 	.audio_r(audio_r),
+	.audio_lrck(audio_lrck),
 	.MA(MA),
 	.MD(MD),
 	.MWR_N(MWR_N),
@@ -389,21 +392,26 @@ snes_core #(.USE_DSPN(1)) core(
 	.SDR_DQ(SDR_DQ)
 );
 
-//---------- DVI ------------
+//---------- HDMI ------------
 
-// DVI (no HDMI audio for now: hdmi_tx of zhdmi is 2240 LUTs, the core does not fit with it; the
-// sound is on the PCM5102 output). 640 x 480: negative syncs.
+// HDMI with the sound of the SNES and the AVI InfoFrame (snes_hdmi: its own small encoder; hdmi_tx of zhdmi
+// is 2240 LUTs and did not fit); plain DVI when the firmware says dvi_only. 640 x 480 and 576p: negative
+// syncs.
 wire [9:0] enc_r, enc_g, enc_b;
-dvi dvi(
-	.CLK(clk_pix),
-	.RESET(~locked_hdmi),
-	.RGB(osd_rgb),
-	.HSYNC(~hd_hs),
-	.VSYNC(~hd_vs),
-	.DE(hd_de),
-	.ENC_RED(enc_r),
-	.ENC_GREEN(enc_g),
-	.ENC_BLUE(enc_b)
+snes_hdmi hdmi(
+	.clk_pix(clk_pix),
+	.pal(vid_pal),
+	.dvi_only(dvi_only),
+	.rgb(osd_rgb),
+	.hs(hd_hs),
+	.vs(hd_vs),
+	.de(hd_de),
+	.audio_l(audio_l),
+	.audio_r(audio_r),
+	.lrck(audio_lrck),
+	.tmds_r(enc_r),
+	.tmds_g(enc_g),
+	.tmds_b(enc_b)
 );
 
 tmds_serializer ser_b(.clk(clk_pix), .sclk(clk_hdmi), .sclk_n(clk_hdmi_n), .reset(~locked_hdmi),

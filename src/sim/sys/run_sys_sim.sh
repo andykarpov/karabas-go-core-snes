@@ -11,3 +11,5 @@ iverilog -g2005 -o build/tb_video -s tb_video tb_video.v $RTL/video/snes_video.v
 vvp -n build/tb_video | grep -v "finish"
 iverilog -g2005 -o build/tb_kbd -s tb_kbd tb_kbd.v $RTL/snes_kbd.v
 vvp -n build/tb_kbd | grep -v "finish"
+iverilog -g2005 -o build/tb_hdmi -s tb_hdmi tb_hdmi.v $RTL/video/snes_hdmi.v ../../../modules/rtl/ctl/kg_sync.v
+vvp -n build/tb_hdmi | grep -v "finish"

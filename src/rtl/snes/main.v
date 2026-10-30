@@ -63,6 +63,7 @@ module main (
 
 	input             BLEND,
 	input             PAL,
+	input             PAL_ID,  // karabas: the PAL bit of $213F, apart from the timing (PAL)
 	input             DIS_SHORTLINE,
 	output            HIGH_RES,
 	output            FIELD,
@@ -136,7 +137,8 @@ module main (
 	output            SS_DDR_REQ,
 
 	output     [15:0] AUDIO_L,
-	output     [15:0] AUDIO_R
+	output     [15:0] AUDIO_R,
+	output            LRCK     // karabas: a period per sample of AUDIO_L / R (for HDMI)
 );
 
 parameter USE_DLH = 1'b1;
@@ -259,6 +261,7 @@ SNES SNES
 
 	.blend(BLEND),
 	.pal(PAL),
+	.pal_id(PAL_ID), // karabas
 	.dis_shortline(DIS_SHORTLINE),
 	.high_res(HIGH_RES),
 	.field_out(FIELD),
@@ -297,7 +300,8 @@ SNES SNES
 	.turbo(TURBO),
 
 	.audio_l(AUDIO_L),
-	.audio_r(AUDIO_R)
+	.audio_r(AUDIO_R),
+	.lrck(LRCK) // karabas
 );
 
 

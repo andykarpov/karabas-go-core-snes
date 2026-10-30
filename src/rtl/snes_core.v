@@ -63,6 +63,7 @@ module snes_core #(
 	output wire pal,                // the video mode (clk_sys): 0 NTSC 640 x 480, 1 PAL 720 x 576
 	output wire [15:0] audio_l,
 	output wire [15:0] audio_r,
+	output wire audio_lrck,         // clk_sys: a period per sample (snes_hdmi)
 
 	output wire [20:0] MA,
 	inout wire [15:0] MD,
@@ -134,6 +135,7 @@ snes_system #(.USE_DSPN(USE_DSPN)) snes(
 	.pal(pal),
 	.audio_l(audio_l),
 	.audio_r(audio_r),
+	.audio_lrck(audio_lrck),
 	.running(),
 	.MA(MA),
 	.MD(MD),

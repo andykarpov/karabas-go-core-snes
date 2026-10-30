@@ -51,6 +51,7 @@ module snes_system #(
 	output wire pal,
 	output wire [15:0] audio_l,
 	output wire [15:0] audio_r,
+	output wire audio_lrck,         // a period per sample, the sample changes in its high half
 	output wire running,            // not in reset (for the OSD / debug)
 
 	output wire [20:0] MA,
@@ -136,16 +137,20 @@ function [23:0] mask_of;
 endfunction
 reg [23:0] rom_mask = 24'd0, ram_mask = 24'd0;
 reg pal_r = 1'b0;
+reg pal_id = 1'b0;
 assign pal = pal_r;
 
 always @(posedge clk_sys) begin
 	// (1024 << size) - 1 of SNES.sv as a table (a variable 24-bit shift is two barrel shifters)
 	rom_mask <= mask_of((h_rom_size < 4'd7) ? 4'hC : h_rom_size);
 	ram_mask <= h_ram_size ? mask_of(h_ram_size) : 24'd0;
-	// karabas: auto is NTSC, also for a PAL cartridge (the region of the header is not used): a
-	// monitor that shows 60 Hz only gets 640 x 480 always; a PAL game runs ~20 % fast. PAL (576p)
-	// only when chosen in the OSD.
+	// karabas: the timing is NTSC on auto, also for a PAL cartridge: a monitor that shows 60 Hz
+	// only gets 640 x 480 always; a PAL game runs ~20 % fast. PAL (576p) only when chosen in the OSD.
 	pal_r <= region_sel == 2'd2;
+	// the region the game sees in $213F: of the header on auto, so a PAL game on the NTSC timing
+	// does not stop at its "not designed for your SUPER NES" screen (as a 50/60 Hz switch mod)
+	pal_id <= region_sel == 2'd2 ? 1'b1 : region_sel == 2'd1 ? 1'b0 :
+		(h_region >= 8'h02 && h_region <= 8'h0C) || h_region == 8'h11;
 
 	rom_type <= {6'd0, lhrom};
 	//DSP3
@@ -270,6 +275,7 @@ main #(
 
 	.BLEND(1'b0),
 	.PAL(pal_r),
+	.PAL_ID(pal_id),
 	.DIS_SHORTLINE(1'b0),
 	.HIGH_RES(),
 	.FIELD(),
@@ -339,7 +345,8 @@ main #(
 	.SS_DDR_REQ(),
 
 	.AUDIO_L(audio_l),
-	.AUDIO_R(audio_r)
+	.AUDIO_R(audio_r),
+	.LRCK(audio_lrck)
 );
 
 snes_joy joy1(.clk(clk_sys), .pad(pad1), .strobe(JOY_STRB), .port_clk(JOY1_CLK), .port_do(JOY1_DO));

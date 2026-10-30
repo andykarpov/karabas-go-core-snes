@@ -33,6 +33,7 @@ entity SPPU is
 		EXTLATCH		: in std_logic;
 		
 		PAL			: in std_logic;
+		PAL_ID		: in std_logic; -- karabas: the PAL bit of $213F (a PAL game on NTSC timing still sees PAL)
 		BLEND			: in std_logic;
 
 		HIGH_RES		: out std_logic;
@@ -781,7 +782,7 @@ begin
 					D_OUT <= MDR2(7 downto 1) & OPVCT(8);
 				end if;
 			when x"3F" =>						--STAT78
-				D_OUT <= FIELD & ((not EXTLATCH) or F_LATCH) & MDR2(5) & PAL & x"3";
+				D_OUT <= FIELD & ((not EXTLATCH) or F_LATCH) & MDR2(5) & PAL_ID & x"3"; -- karabas: was PAL
 			when others =>
 				D_OUT <= DI;
 		end case;

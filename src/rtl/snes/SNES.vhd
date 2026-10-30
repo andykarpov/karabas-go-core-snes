@@ -14,6 +14,7 @@ entity SNES is
 		RST_N			: in std_logic;
 		ENABLE		: in std_logic;
 		PAL			: in std_logic;
+		PAL_ID		: in std_logic; -- karabas: the PAL bit of $213F, apart from the timing (PAL)
 		BLEND			: in std_logic;
 		DIS_SHORTLINE : in std_logic;
 		
@@ -329,6 +330,7 @@ begin
 		
 		BLEND			=> BLEND,
 		PAL			=> PAL,
+		PAL_ID		=> PAL_ID, -- karabas
 		HIGH_RES		=> HIGH_RES,
 		DOTCLK		=> DOTCLK,
 		FIELD_OUT	=> FIELD_OUT,
