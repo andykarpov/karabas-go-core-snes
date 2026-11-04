@@ -13,9 +13,8 @@ Karabas boards.
 | Karabas Mini | `snes.kg` | HDMI, 640x480 60 Hz | HDMI, analog output (sigma-delta) |
 | Karabas Mini G | `snes.kg` | HDMI, 640x480 60 Hz | HDMI, I2S DAC (PCM5102) |
 
-The core files are in `src/` and in the release repos
-([karabas-go](https://github.com/andykarpov/karabas-go),
-[karabas-mini](https://github.com/andykarpov/karabas-mini)). They contain no game ROMs.
+The core file is in `src/` and in the release repo
+[karabas-go](https://github.com/andykarpov/karabas-go) (`cores/`, one file for all the boards). They contain no game ROMs.
 
 **State:** the Mini G build is tested on hardware (games, HDMI picture and sound). The Mini and Go
 builds are made from the same sources and are not tested on hardware yet.
