@@ -9,9 +9,9 @@ Karabas.
 
 | Плата | Файл ядра | Видео | Звук |
 |---|---|---|---|
-| Karabas Go | `snes.kg1` | VGA, 640x480 60 Гц | I2S ЦАП (PCM5102) |
-| Karabas Mini | `snes.kg2` | HDMI, 640x480 60 Гц | HDMI, аналоговый выход (сигма-дельта) |
-| Karabas Mini G | `snes.kg3` | HDMI, 640x480 60 Гц | HDMI, I2S ЦАП (PCM5102) |
+| Karabas Go | `snes.kg` | VGA, 640x480 60 Гц | I2S ЦАП (PCM5102) |
+| Karabas Mini | `snes.kg` | HDMI, 640x480 60 Гц | HDMI, аналоговый выход (сигма-дельта) |
+| Karabas Mini G | `snes.kg` | HDMI, 640x480 60 Гц | HDMI, I2S ЦАП (PCM5102) |
 
 Файлы ядра лежат в `src/` и в релизных репозиториях
 ([karabas-go](https://github.com/andykarpov/karabas-go),
@@ -40,7 +40,7 @@ Karabas.
 
 ## Как начать
 
-1. Скопируйте `snes.kg1` (Go), `snes.kg2` (Mini) или `snes.kg3` (Mini G) в корень SD-карты платы.
+1. Скопируйте `snes.kg` (один файл для Go, Mini и Mini G) в корень SD-карты платы.
 2. Положите файлы ROM (`.sfc`, `.smc`, `.bin`) в папку `/snes` SD-карты.
 3. Выберите SNES в меню ядер и ROM в файловом браузере. Игра запускается, как только загрузится.
 

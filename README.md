@@ -9,9 +9,9 @@ Karabas boards.
 
 | Board | Core file | Video | Audio |
 |---|---|---|---|
-| Karabas Go | `snes.kg1` | VGA, 640x480 60 Hz | I2S DAC (PCM5102) |
-| Karabas Mini | `snes.kg2` | HDMI, 640x480 60 Hz | HDMI, analog output (sigma-delta) |
-| Karabas Mini G | `snes.kg3` | HDMI, 640x480 60 Hz | HDMI, I2S DAC (PCM5102) |
+| Karabas Go | `snes.kg` | VGA, 640x480 60 Hz | I2S DAC (PCM5102) |
+| Karabas Mini | `snes.kg` | HDMI, 640x480 60 Hz | HDMI, analog output (sigma-delta) |
+| Karabas Mini G | `snes.kg` | HDMI, 640x480 60 Hz | HDMI, I2S DAC (PCM5102) |
 
 The core files are in `src/` and in the release repos
 ([karabas-go](https://github.com/andykarpov/karabas-go),
@@ -40,7 +40,7 @@ the board is switched off), the SPC player, mouse, multitap, cheats.
 
 ## Getting started
 
-1. Copy `snes.kg1` (Go), `snes.kg2` (Mini) or `snes.kg3` (Mini G) to the root of the SD card of
+1. Copy `snes.kg` (one file for Go, Mini and Mini G) to the root of the SD card of
    the board.
 2. Put your ROM files (`.sfc`, `.smc`, `.bin`) into the folder `/snes` of the SD card.
 3. Choose SNES in the core menu and pick a ROM in the file browser. The game starts when it is
