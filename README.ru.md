@@ -13,9 +13,8 @@ Karabas.
 | Karabas Mini | `snes.kg` | HDMI, 640x480 60 Гц | HDMI, аналоговый выход (сигма-дельта) |
 | Karabas Mini G | `snes.kg` | HDMI, 640x480 60 Гц | HDMI, I2S ЦАП (PCM5102) |
 
-Файлы ядра лежат в `src/` и в релизных репозиториях
-([karabas-go](https://github.com/andykarpov/karabas-go),
-[karabas-mini](https://github.com/andykarpov/karabas-mini)). ROM игр в них нет.
+Файл ядра лежит в `src/` и в релизном репозитории
+[karabas-go](https://github.com/andykarpov/karabas-go) (`cores/`, один файл для всех плат). ROM игр в них нет.
 
 **Состояние:** сборка Mini G проверена на железе (игры, картинка и звук по HDMI). Сборки Mini и Go
 сделаны из тех же исходников, на железе ещё не проверены.
