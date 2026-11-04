@@ -82,3 +82,4 @@ src/sim/*/build/
 
 # logs of make
 src/build_*.log
+src/kg_*.stamp
