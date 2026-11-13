@@ -32,7 +32,11 @@
 */
 
 module snes_core #(
-	parameter USE_DSPN = 1
+	parameter USE_DSPN = 1,
+	// the MCU link: 1 = v1 (kg_mcu: softsw_command / osd_command, the switches and kg_osd_overlay in
+	// here), 2 = v2 (kg_mcu2: the SW registers on sw_regs; rgb / hs / vs / de without the OSD, one clk_pix
+	// late as with it: kg_l2_osd_overlay is in the top)
+	parameter LINK = 1
 ) (
 	input wire clk_sys,
 	input wire clk_mem,
@@ -42,6 +46,7 @@ module snes_core #(
 	// kg_mcu
 	input wire [15:0] softsw_command,
 	input wire [15:0] osd_command,
+	input wire [31:0] sw_regs,      // LINK 2: the SW registers 0..3 of kg_mcu2
 	input wire mcu_busy,
 	input wire [12:0] joy_l,
 	input wire [12:0] joy_r,
@@ -81,12 +86,16 @@ module snes_core #(
 );
 
 wire [31:0] softsw_regs;
+generate if (LINK == 1) begin : sw1
 kg_soft_switches #(.N(4)) soft_switches(
 	.clk(clk_sys),
 	.command(softsw_command),
 	.regs(softsw_regs),
 	.upd()
 );
+end else begin : sw2
+	assign softsw_regs = sw_regs;
+end endgenerate
 wire [1:0] rom_sel = softsw_regs[1:0];
 wire [1:0] region_sel = softsw_regs[9:8];
 wire joy_swap = softsw_regs[16];
@@ -163,6 +172,8 @@ snes_video video(
 	.osd_hs(v_osd_hs), .osd_vs(v_osd_vs)
 );
 
+wire [23:0] rgb1;
+generate if (LINK == 1) begin : osd1
 // osd_command into clk_pix
 reg [15:0] osd_cmd_d = 16'd0;
 reg osd_cmd_wr = 1'b0;
@@ -187,11 +198,19 @@ always @(posedge clk_pix)
 kg_osd_overlay #(.H_OFFSET(96), .V_OFFSET(33)) osd(
 	.clk(clk_pix),
 	.rgb_i({v_r, v_g, v_b}),
-	.rgb_o(rgb),
+	.rgb_o(rgb1),
 	.hsync_i(v_osd_hs),
 	.vsync_i(v_osd_vs),
 	.osd_command(osd_cmd_q)
 );
+	assign rgb = rgb1;
+end else begin : osd2
+	// as the overlay: one clk_pix late
+	reg [23:0] rgb_r = 24'd0;
+	always @(posedge clk_pix) rgb_r <= {v_r, v_g, v_b};
+	assign rgb = rgb_r;
+	assign rgb1 = 24'd0;
+end endgenerate
 
 // the overlay is one clk late: the syncs and DE with it
 always @(posedge clk_pix) begin

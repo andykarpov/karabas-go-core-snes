@@ -13,7 +13,7 @@
     "boards": {
         "go": {"bitstream": "karabas_go_top.bin"},
         "mini": {"bitstream": "karabas_mini_top.bin"},
-        "minig": {"bitstream": "karabas_minig_top.bin"}
+        "minig": {"link": 2, "build": "26111315", "bitstream": "karabas_minig_top.bin"}
     },
     "osd": [
     {"type": "S", "name": "ROM type", "options": ["Auto", "LoROM", "HiROM", "ExHiROM"], "default": 0, "hotkey": "Menu+M"},
